@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Rocket, CheckSquare, Brain, CalendarDays, Users, LogOut } from 'lucide-react';
+import { Rocket, CheckSquare, Brain, CalendarDays, Users, LogOut, FlaskConical } from 'lucide-react';
 
 const navItems = [
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/memory', label: 'Memory', icon: Brain },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/teams', label: 'Teams', icon: Users },
+  { href: '/rd', label: 'R&D Lab', icon: FlaskConical },
 ];
 
 export default function Sidebar() {

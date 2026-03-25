@@ -45,6 +45,20 @@ function initializeDb(db: DbInstance) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS memos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      summary TEXT,
+      visionary_input TEXT,
+      analyst_input TEXT,
+      pragmatist_input TEXT,
+      debate TEXT,
+      recommendations TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed team members if empty
