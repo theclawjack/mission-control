@@ -4,14 +4,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, X, Loader2, CalendarDays, Clock } from 'lucide-react';
 
 interface CalEvent {
-  id: number;
+  id: number | string;
   title: string;
   description: string;
   date: string;
   time: string;
   type: 'task' | 'reminder' | 'cron';
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+  readOnly?: boolean;
 }
 
 const TYPE_STYLES: Record<string, { bg: string; text: string; border: string; dot: string }> = {
@@ -58,7 +59,7 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
+  const [editingEvent, setEditingEvent] = useState<(CalEvent & { id: number }) | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,9 +70,17 @@ export default function CalendarPage() {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/events?year=${viewYear}&month=${viewMonth + 1}`);
-      const data = await res.json();
-      setEvents(Array.isArray(data) ? data : []);
+      const [eventsRes, cronRes] = await Promise.all([
+        fetch(`/api/events?year=${viewYear}&month=${viewMonth + 1}`),
+        fetch(`/api/cron-events?year=${viewYear}&month=${viewMonth + 1}`),
+      ]);
+      const eventsData = await eventsRes.json();
+      const cronData = await cronRes.json();
+      const combined = [
+        ...(Array.isArray(eventsData) ? eventsData : []),
+        ...(Array.isArray(cronData) ? cronData : []),
+      ];
+      setEvents(combined);
     } catch {
       setEvents([]);
     } finally {
@@ -114,7 +123,8 @@ export default function CalendarPage() {
   }
 
   function openEdit(event: CalEvent) {
-    setEditingEvent(event);
+    if (event.readOnly) return; // cron events are read-only
+    setEditingEvent(event as CalEvent & { id: number });
     setForm({
       title: event.title,
       description: event.description || '',
@@ -156,7 +166,8 @@ export default function CalendarPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: number | string) {
+    if (typeof id === 'string' && id.startsWith('cron-')) return; // read-only
     if (!confirm('Delete this event?')) return;
     await fetch(`/api/events/${id}`, { method: 'DELETE' });
     fetchEvents();
@@ -206,7 +217,7 @@ export default function CalendarPage() {
             <CalendarDays className="text-cyan-400" size={24} />
             Calendar
           </h1>
-          <p className="text-slate-400 text-sm mt-0.5">{events.length} event{events.length !== 1 ? 's' : ''} this month</p>
+          <p className="text-slate-400 text-sm mt-0.5">{events.filter(e => !e.readOnly).length} event{events.filter(e => !e.readOnly).length !== 1 ? 's' : ''} · {events.filter(e => e.readOnly).length} cron job{events.filter(e => e.readOnly).length !== 1 ? 's' : ''} this month</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -305,9 +316,9 @@ export default function CalendarPage() {
                             key={ev.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              openEdit(ev);
+                              if (!ev.readOnly) openEdit(ev);
                             }}
-                            className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${s.bg} ${s.text}`}
+                            className={`text-xs px-1.5 py-0.5 rounded truncate ${ev.readOnly ? 'cursor-default' : 'cursor-pointer hover:opacity-80'} ${s.bg} ${s.text}`}
                           >
                             {ev.time && <span className="mr-1 opacity-60">{ev.time}</span>}
                             {ev.title}
@@ -373,20 +384,22 @@ export default function CalendarPage() {
                             {ev.type}
                           </span>
                         </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => openEdit(ev)}
-                            className="p-1 rounded text-slate-400 hover:text-cyan-400"
-                          >
-                            <Edit2 size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(ev.id)}
-                            className="p-1 rounded text-slate-400 hover:text-red-400"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        {!ev.readOnly && (
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => openEdit(ev)}
+                              className="p-1 rounded text-slate-400 hover:text-cyan-400"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(ev.id)}
+                              className="p-1 rounded text-slate-400 hover:text-red-400"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

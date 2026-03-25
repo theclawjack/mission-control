@@ -61,6 +61,13 @@ function initializeDb(db: DbInstance) {
     );
   `);
 
+  // Migration: add completed_note column if not exists
+  try {
+    db.prepare("ALTER TABLE tasks ADD COLUMN completed_note TEXT DEFAULT ''").run();
+  } catch {
+    // Column already exists, ignore
+  }
+
   // Seed team members if empty
   const count = db.prepare('SELECT COUNT(*) as c FROM team_members').get() as { c: number };
   if (count.c === 0) {
