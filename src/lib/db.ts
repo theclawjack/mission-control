@@ -68,6 +68,25 @@ function initializeDb(db: DbInstance) {
     // Column already exists, ignore
   }
 
+  // Agent status tracking table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_status (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_name TEXT NOT NULL UNIQUE,
+      status TEXT DEFAULT 'idle',
+      current_activity TEXT DEFAULT '',
+      last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Seed agent statuses
+  const agentNames = ['Jack', 'Planner', 'Coder', 'Reviewer', 'Writer', 'Debugger'];
+  const insertStatus = db.prepare('INSERT OR IGNORE INTO agent_status (agent_name) VALUES (?)');
+  for (const a of agentNames) {
+    insertStatus.run(a);
+  }
+
   // Seed team members if empty
   const count = db.prepare('SELECT COUNT(*) as c FROM team_members').get() as { c: number };
   if (count.c === 0) {
