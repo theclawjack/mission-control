@@ -54,7 +54,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-cyan-500/20 border border-cyan-500/40 rounded-2xl mb-4">
             <Rocket className="text-cyan-400" size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-white">Mission Control</h1>
+          <h1 className="text-3xl font-bold text-white">Jashboard</h1>
           <p className="text-slate-400 mt-1">Enter your access code to continue</p>
         </div>
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
               ) : (
                 <>
                   <Rocket size={18} />
-                  Launch Mission Control
+                  Launch Jashboard
                 </>
               )}
             </button>
@@ -104,7 +104,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-slate-600 text-xs mt-6">
-          🚀 Mission Control v1.0 · Secure Access
+          🚀 Jashboard v1.0 · Secure Access
         </p>
       </div>
     </div>

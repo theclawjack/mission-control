@@ -111,7 +111,7 @@ function initializeDb(db: DbInstance) {
   if (taskCount.c === 0) {
     db.prepare(
       'INSERT INTO tasks (title, description, assignee, priority, status) VALUES (?, ?, ?, ?, ?)'
-    ).run('Welcome to Mission Control', 'This is your first task. Edit or delete it!', 'Jet', 'low', 'todo');
+    ).run('Welcome to Jashboard', 'This is your first task. Edit or delete it!', 'Jet', 'low', 'todo');
   }
 }
 

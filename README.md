@@ -1,4 +1,4 @@
-# 🚀 Mission Control
+# 🚀 Jashboard
 
 AI Agent Dashboard for OpenClaw — built by Jack (Opus 4.6) and the team.
 

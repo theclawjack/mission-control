@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Menu size={20} />
           </button>
-          <span className="text-white font-semibold text-sm">🚀 Mission Control</span>
+          <span className="text-white font-semibold text-sm">🚀 Jashboard</span>
         </div>
 
         <StatusBanner />

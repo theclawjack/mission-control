@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '🚀 Mission Control',
-  description: 'Mission Control Dashboard',
+  title: '🚀 Jashboard',
+  description: 'Jashboard Dashboard',
 };
 
 export default function RootLayout({

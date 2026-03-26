@@ -52,7 +52,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <Rocket className="text-cyan-400" size={18} />
             </div>
             <div>
-              <div className="font-bold text-white text-base leading-tight">Mission Control</div>
+              <div className="font-bold text-white text-base leading-tight">Jashboard</div>
               <div className="text-slate-500 text-xs">Operations Dashboard</div>
             </div>
           </div>
