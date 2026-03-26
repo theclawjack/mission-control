@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const { searchParams } = new URL(request.url);
@@ -27,6 +29,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const body = await request.json();

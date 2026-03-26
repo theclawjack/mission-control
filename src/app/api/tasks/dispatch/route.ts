@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
 // Agent names (non-human assignees)
@@ -39,6 +40,7 @@ export async function GET() {
  * complete → sets status to "done", appends completed_note
  */
 export async function POST(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const body = await request.json();

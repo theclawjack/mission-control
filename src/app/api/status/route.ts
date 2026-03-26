@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const statuses = db.prepare('SELECT * FROM agent_status ORDER BY agent_name').all() as Record<string, unknown>[];
@@ -21,6 +23,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const { agent, status, activity } = await request.json();

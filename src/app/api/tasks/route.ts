@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const tasks = db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all();
@@ -13,6 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const body = await request.json();

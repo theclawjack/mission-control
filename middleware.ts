@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// Middleware runs in Edge runtime — just checks cookie format
+// Full HMAC verification happens in each API route via requireAuth()
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page and auth API routes
   if (
     pathname.startsWith('/login') ||
     pathname.startsWith('/api/auth') ||
@@ -14,10 +15,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const authCookie = request.cookies.get('mc_auth');
-  if (!authCookie || authCookie.value !== 'authenticated') {
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
+  const token = request.cookies.get('mc_auth')?.value;
+  // Token must exist and have the "value.signature" format (two dot-separated parts)
+  const looksValid = !!token && token.includes('.') && token.split('.').length === 2;
+
+  if (!looksValid) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();

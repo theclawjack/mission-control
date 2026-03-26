@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const id = parseInt(params.id);
@@ -32,7 +34,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
     const id = parseInt(params.id);

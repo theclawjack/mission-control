@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -38,6 +39,8 @@ function toTimeStr(d: Date) {
 }
 
 export async function GET(request: NextRequest) {
+  const authErr2 = requireAuth(request); if (authErr2) return authErr2;
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const { searchParams } = new URL(request.url);
     const year = parseInt(searchParams.get('year') || String(new Date().getUTCFullYear()));
