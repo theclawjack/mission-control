@@ -38,8 +38,9 @@ function toTimeStr(d: Date) {
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
-  const authErr2 = requireAuth(request); if (authErr2) return authErr2;
   const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const { searchParams } = new URL(request.url);

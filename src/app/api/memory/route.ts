@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
 
+export const dynamic = 'force-dynamic';
+
 const WORKSPACE = '/root/.openclaw/workspace';
 
 interface MemoryFile {

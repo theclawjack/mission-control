@@ -99,6 +99,13 @@ function initializeDb(db: DbInstance) {
     // Column already exists, ignore
   }
 
+  // Indexes for common queries on tasks
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks (parent_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
+  `);
+
   // Activity log table
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -108,6 +115,11 @@ function initializeDb(db: DbInstance) {
       metadata TEXT DEFAULT '{}',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  // Index on activity_log after table is created
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log (created_at);
   `);
 
   // Agent status tracking table

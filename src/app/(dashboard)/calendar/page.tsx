@@ -236,9 +236,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
         {/* Calendar grid */}
-        <div className="flex-1 flex flex-col bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
+        <div className="flex-1 flex flex-col bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden min-h-[400px]">
           {/* Month nav */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
             <button
@@ -337,7 +337,7 @@ export default function CalendarPage() {
         </div>
 
         {/* Selected day panel */}
-        <div className="w-72 flex flex-col bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
+        <div className="lg:w-72 flex flex-col bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-800">
             <h3 className="font-semibold text-slate-200 text-sm">
               {selectedDate

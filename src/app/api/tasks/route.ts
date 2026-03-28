@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/activity';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   const authErr = requireAuth(request); if (authErr) return authErr;
   try {

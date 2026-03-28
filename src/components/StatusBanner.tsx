@@ -62,7 +62,9 @@ export default function StatusBanner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const working = statuses.filter((s) => s.effective_status === 'working');
+  const working = statuses.filter((s) =>
+    s.effective_status === 'working' || s.effective_status === 'busy' || s.effective_status === 'active'
+  );
 
   return (
     <div className="px-4 py-2 bg-slate-900/80 backdrop-blur border-b border-slate-800 flex items-center gap-4 shrink-0">
@@ -71,9 +73,9 @@ export default function StatusBanner() {
           <div key={s.agent_name} className="relative group flex items-center gap-1.5">
             <div
               className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                s.effective_status === 'working'
+                s.effective_status === 'working' || s.effective_status === 'busy'
                   ? 'bg-blue-500 animate-pulse'
-                  : s.effective_status === 'idle'
+                  : s.effective_status === 'idle' || s.effective_status === 'active'
                   ? 'bg-green-500'
                   : 'bg-gray-500'
               }`}
@@ -95,8 +97,9 @@ export default function StatusBanner() {
           <span className="text-blue-400">
             🔵{' '}
             {working
+              .filter((w) => w.current_activity)
               .map((w) => `${w.agent_name}: ${w.current_activity}`)
-              .join(' · ')}
+              .join(' · ') || `${working.length} agent${working.length > 1 ? 's' : ''} active`}
           </span>
         ) : (
           'All agents idle'

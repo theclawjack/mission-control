@@ -4,6 +4,8 @@ import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/activity';
 import { notifyDiscord } from '@/lib/notify';
 
+export const dynamic = 'force-dynamic';
+
 // Support both PUT and PATCH
 export const PATCH = async (request: NextRequest, context: { params: { id: string } }) =>
   PUT(request, context);
@@ -69,6 +71,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
+    // Delete subtasks first, then parent
+    db.prepare('DELETE FROM tasks WHERE parent_id = ?').run(id);
     db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -4,6 +4,8 @@ import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/activity';
 import { notifyDiscord } from '@/lib/notify';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const authErr = requireAuth(request);
   if (authErr) return authErr;

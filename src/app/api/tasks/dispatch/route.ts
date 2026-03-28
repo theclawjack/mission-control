@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 // Agent names (non-human assignees)
 const AGENT_NAMES = ['Jack', 'Planner', 'Coder', 'Reviewer', 'Writer', 'Debugger'];
 
@@ -9,7 +11,8 @@ const AGENT_NAMES = ['Jack', 'Planner', 'Coder', 'Reviewer', 'Writer', 'Debugger
  * GET /api/tasks/dispatch
  * Returns all tasks with status "todo" assigned to an agent (not "Jet")
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
 

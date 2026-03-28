@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signToken, PASSWORD, checkRateLimit, resetRateLimit } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';

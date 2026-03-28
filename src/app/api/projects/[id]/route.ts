@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const dynamic = 'force-dynamic';
+
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authError = requireAuth(request);
   if (authError) return authError;
 
-  const { id } = await params;
+  const { id } = params;
   const body = await request.json();
   const db = getDb();
 
@@ -35,12 +37,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json(updated);
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   const authError = requireAuth(request);
   if (authError) return authError;
 
-  const { id } = await params;
+  const { id } = params;
   const db = getDb();
+  // Unlink tasks from this project before deleting
+  db.prepare('UPDATE tasks SET project_id = NULL WHERE project_id = ?').run(id);
   db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   return NextResponse.json({ ok: true });
 }

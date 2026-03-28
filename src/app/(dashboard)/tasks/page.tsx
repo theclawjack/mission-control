@@ -461,20 +461,36 @@ export default function TasksPage() {
 
   async function handleDelete(id: number) {
     if (!confirm('Delete this task?')) return;
-    await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-    fetchTasks();
+    // Optimistic remove
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+    } catch {
+      fetchTasks(); // revert on error
+    }
   }
 
   async function moveTask(task: Task, direction: 'left' | 'right') {
     const idx = STATUS_ORDER.indexOf(task.status);
     const newIdx = direction === 'right' ? idx + 1 : idx - 1;
     if (newIdx < 0 || newIdx >= STATUS_ORDER.length) return;
-    await fetch(`/api/tasks/${task.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: STATUS_ORDER[newIdx] }),
-    });
-    fetchTasks();
+    const newStatus = STATUS_ORDER[newIdx];
+
+    // Optimistic update
+    setTasks((prev) =>
+      prev.map((t) => t.id === task.id ? { ...t, status: newStatus } : t)
+    );
+
+    try {
+      await fetch(`/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch {
+      // Revert on error
+      fetchTasks();
+    }
   }
 
   async function onDragEnd(result: DropResult) {
@@ -484,12 +500,22 @@ export default function TasksPage() {
     if (sourceCol === destCol) return;
 
     const taskId = parseInt(result.draggableId);
-    await fetch(`/api/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: destCol }),
-    });
-    fetchTasks();
+
+    // Optimistic update — move card immediately
+    setTasks((prev) =>
+      prev.map((t) => t.id === taskId ? { ...t, status: destCol } : t)
+    );
+
+    try {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: destCol }),
+      });
+    } catch {
+      // Revert on error
+      fetchTasks();
+    }
   }
 
   const grouped = COLUMNS.reduce<Record<Status, Task[]>>((acc, col) => {
