@@ -106,6 +106,108 @@ function initializeDb(db: DbInstance) {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
   `);
 
+  // New tables for Phase 1 features
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      role TEXT NOT NULL DEFAULT 'user',
+      content TEXT NOT NULL,
+      agent TEXT DEFAULT 'Jack',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cost_usd REAL DEFAULT 0.0,
+      task_ref TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_agent ON usage_log(agent);
+    CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
+
+    CREATE TABLE IF NOT EXISTS git_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      repo TEXT NOT NULL,
+      branch TEXT DEFAULT 'main',
+      title TEXT NOT NULL,
+      author TEXT DEFAULT '',
+      sha TEXT DEFAULT '',
+      url TEXT DEFAULT '',
+      project_id INTEGER DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_git_project ON git_events(project_id);
+    CREATE INDEX IF NOT EXISTS idx_git_created ON git_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT DEFAULT '',
+      read INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(read);
+  `);
+
+  // Seed usage_log if empty
+  const usageCount = db.prepare('SELECT COUNT(*) as c FROM usage_log').get() as { c: number };
+  if (usageCount.c === 0) {
+    const insUsage = db.prepare(
+      'INSERT INTO usage_log (agent, model, input_tokens, output_tokens, cost_usd, task_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    const now = Date.now();
+    const sampleUsage = [
+      ['Jack', 'claude-opus-4-6', 15000, 8000, 0.27, 'Jashboard upgrade', new Date(now - 6 * 86400000).toISOString()],
+      ['Planner', 'claude-sonnet-4-6', 12000, 6000, 0.12, 'ClawWork planning', new Date(now - 5 * 86400000).toISOString()],
+      ['Coder', 'claude-opus-4-6', 45000, 30000, 0.98, 'Phase 1 implementation', new Date(now - 3 * 86400000).toISOString()],
+      ['Reviewer', 'claude-sonnet-4-6', 20000, 10000, 0.18, 'QA audit', new Date(now - 1 * 86400000).toISOString()],
+    ];
+    for (const u of sampleUsage) {
+      insUsage.run(...u);
+    }
+  }
+
+  // Seed git_events if empty
+  const gitCount = db.prepare('SELECT COUNT(*) as c FROM git_events').get() as { c: number };
+  if (gitCount.c === 0) {
+    const insGit = db.prepare(
+      'INSERT INTO git_events (type, repo, branch, title, author, sha, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    const now2 = Date.now();
+    const commits = [
+      ['commit', 'mission-control', 'main', 'Initial commit: Mission Control dashboard', 'Jack', '4122173', 1, new Date(now2 - 5 * 86400000).toISOString()],
+      ['commit', 'mission-control', 'main', 'Security hardening: fix all auth vulnerabilities', 'Jack', 'bea2174', 1, new Date(now2 - 4 * 86400000).toISOString()],
+      ['commit', 'mission-control', 'main', 'Tier 1+2 upgrade: DnD kanban, SSE, activity feed', 'Coder', '184d37f', 1, new Date(now2 - 3 * 86400000).toISOString()],
+      ['commit', 'mission-control', 'main', 'Reviewer QA: fix 11 bugs + add DB indexes', 'Reviewer', 'b22df66', 1, new Date(now2 - 2 * 86400000).toISOString()],
+      ['commit', 'mission-control', 'main', 'UX: task filters, collapsible Done column', 'Jack', 'a0934de', 1, new Date(now2 - 1 * 86400000).toISOString()],
+    ];
+    for (const c of commits) {
+      insGit.run(...c);
+    }
+  }
+
+  // Seed notifications if empty
+  const notifCount = db.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number };
+  if (notifCount.c === 0) {
+    const insNotif = db.prepare(
+      'INSERT INTO notifications (type, title, message, read, created_at) VALUES (?, ?, ?, ?, ?)'
+    );
+    const now3 = Date.now();
+    insNotif.run('system', 'Jashboard Phase 1 deployed', 'Chat, Usage, Git, R&D, and Notifications are live.', 0, new Date(now3 - 300000).toISOString());
+    insNotif.run('rd_complete', 'R&D Cycle completed', 'Latest R&D cycle analysis is ready for review.', 0, new Date(now3 - 1800000).toISOString());
+    insNotif.run('task_completed', 'Task completed: Phase 1 implementation', 'Coder agent finished Phase 1 feature build.', 0, new Date(now3 - 3600000).toISOString());
+    insNotif.run('agent_alert', 'Agent Reviewer went offline', 'Reviewer agent has not checked in for 30 minutes.', 0, new Date(now3 - 7200000).toISOString());
+  }
+
   // Activity log table
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (

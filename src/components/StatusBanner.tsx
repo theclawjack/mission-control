@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import NotificationBell from './NotificationBell';
 
 interface AgentStatus {
   agent_name: string;
@@ -92,18 +93,21 @@ export default function StatusBanner() {
           </div>
         ))}
       </div>
-      <div className="text-xs text-slate-500 ml-auto">
-        {working.length > 0 ? (
-          <span className="text-blue-400">
-            🔵{' '}
-            {working
-              .filter((w) => w.current_activity)
-              .map((w) => `${w.agent_name}: ${w.current_activity}`)
-              .join(' · ') || `${working.length} agent${working.length > 1 ? 's' : ''} active`}
-          </span>
-        ) : (
-          'All agents idle'
-        )}
+      <div className="text-xs text-slate-500 ml-auto flex items-center gap-3">
+        <span>
+          {working.length > 0 ? (
+            <span className="text-blue-400">
+              🔵{' '}
+              {working
+                .filter((w) => w.current_activity)
+                .map((w) => `${w.agent_name}: ${w.current_activity}`)
+                .join(' · ') || `${working.length} agent${working.length > 1 ? 's' : ''} active`}
+            </span>
+          ) : (
+            'All agents idle'
+          )}
+        </span>
+        <NotificationBell />
       </div>
     </div>
   );

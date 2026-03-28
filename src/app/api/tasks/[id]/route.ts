@@ -48,6 +48,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       if (status === 'done') {
         logActivity('task_completed', `Task completed: ${task.title}`, { taskId: id });
         await notifyDiscord(`✅ Task completed: **${task.title}**`);
+        // Create in-app notification
+        try {
+          db.prepare(
+            'INSERT INTO notifications (type, title, message) VALUES (?, ?, ?)'
+          ).run('task_completed', `Task completed: ${task.title as string}`, `Assigned to: ${task.assignee as string}`);
+        } catch { /* ignore notification errors */ }
       } else {
         logActivity('task_moved', `Task moved to ${status}: ${task.title}`, { taskId: id, from: existing.status, to: status });
       }

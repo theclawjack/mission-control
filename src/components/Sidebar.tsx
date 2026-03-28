@@ -5,15 +5,18 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Rocket, LayoutDashboard, CheckSquare, FolderKanban, Brain,
   CalendarDays, Users, LogOut, FlaskConical, X, Search, Settings,
+  MessageSquare, BarChart3,
 } from 'lucide-react';
 
 const navItems = [
   { href: '/home', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/memory', label: 'Memory', icon: Brain },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/teams', label: 'Teams', icon: Users },
+  { href: '/usage', label: 'Usage', icon: BarChart3 },
   { href: '/rd', label: 'R&D Lab', icon: FlaskConical },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, FolderKanban } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, FolderKanban, GitCommit, GitPullRequest, GitMerge } from 'lucide-react';
 
 interface Project {
   id: number;
@@ -14,6 +14,36 @@ interface Project {
   done_task_count: number;
   created_at: string;
   updated_at: string;
+}
+
+interface GitEvent {
+  id: number;
+  type: string;
+  repo: string;
+  branch: string;
+  title: string;
+  author: string;
+  sha: string;
+  url: string;
+  project_id: number | null;
+  created_at: string;
+}
+
+function GitIcon({ type }: { type: string }) {
+  if (type === 'pr_merged') return <GitMerge size={12} className="text-purple-400 shrink-0" />;
+  if (type === 'pr_opened' || type === 'pr_closed') return <GitPullRequest size={12} className="text-blue-400 shrink-0" />;
+  return <GitCommit size={12} className="text-green-400 shrink-0" />;
+}
+
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
 type FilterTab = 'all' | 'active' | 'completed' | 'archived';
@@ -61,6 +91,7 @@ const emptyForm = {
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [gitEvents, setGitEvents] = useState<GitEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [showModal, setShowModal] = useState(false);
@@ -72,7 +103,7 @@ export default function ProjectsPage() {
   const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch('/api/projects');
-      const data = await res.json();
+      const data = await res.json() as Project[];
       setProjects(Array.isArray(data) ? data : []);
     } catch {
       setProjects([]);
@@ -81,9 +112,22 @@ export default function ProjectsPage() {
     }
   }, []);
 
+  const fetchGitEvents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/git');
+      if (res.ok) {
+        const data = await res.json() as GitEvent[];
+        setGitEvents(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchProjects();
-  }, [fetchProjects]);
+    fetchGitEvents();
+  }, [fetchProjects, fetchGitEvents]);
 
   const filtered = filter === 'all'
     ? projects
@@ -256,6 +300,32 @@ export default function ProjectsPage() {
                   </span>
                 )}
               </div>
+
+              {/* Git Activity */}
+              {(() => {
+                const events = gitEvents.filter((e) => e.project_id === project.id).slice(0, 3);
+                if (events.length === 0) return null;
+                return (
+                  <div className="mt-4 pt-4 border-t border-slate-700/50">
+                    <div className="text-xs text-slate-500 font-medium mb-2">Recent Activity</div>
+                    <div className="space-y-2">
+                      {events.map((ev) => (
+                        <div key={ev.id} className="flex items-start gap-2">
+                          <GitIcon type={ev.type} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-slate-300 truncate leading-snug">{ev.title}</div>
+                            <div className="text-xs text-slate-600 mt-0.5">
+                              <span className="font-mono text-slate-500">{ev.sha.slice(0, 7)}</span>
+                              {ev.author && <span className="ml-1">by {ev.author}</span>}
+                              <span className="ml-1">{relativeTime(ev.created_at)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>
