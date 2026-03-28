@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const isoDate = new Date().toISOString().split('T')[0];
     const title = `R&D Cycle — ${isoDate}`;
 
+    // TODO(mock): Replace template strings with real multi-agent R&D pipeline (spawn 3 agents, synthesize)
     const visionaryInput = `🔮 **Visionary Analysis — ${isoDate}**
 
 Emerging opportunities across our portfolio:

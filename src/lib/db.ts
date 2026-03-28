@@ -158,6 +158,7 @@ function initializeDb(db: DbInstance) {
     CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(read);
   `);
 
+  // TODO(mock): Replace seed data with real OpenClaw webhook-based usage logging
   // Seed usage_log if empty
   const usageCount = db.prepare('SELECT COUNT(*) as c FROM usage_log').get() as { c: number };
   if (usageCount.c === 0) {
@@ -176,6 +177,7 @@ function initializeDb(db: DbInstance) {
     }
   }
 
+  // TODO(mock): Replace seed data with GitHub webhook listener for real commit/PR events
   // Seed git_events if empty
   const gitCount = db.prepare('SELECT COUNT(*) as c FROM git_events').get() as { c: number };
   if (gitCount.c === 0) {
@@ -195,6 +197,7 @@ function initializeDb(db: DbInstance) {
     }
   }
 
+  // TODO(mock): Remove seed notifications — real ones are auto-created by task/R&D/agent flows
   // Seed notifications if empty
   const notifCount = db.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number };
   if (notifCount.c === 0) {
@@ -236,6 +239,7 @@ function initializeDb(db: DbInstance) {
     )
   `);
 
+  // TODO(mock): Auto-discover agents from OpenClaw instead of hardcoded list
   // Seed agent statuses
   const agentNames = ['Jack', 'Planner', 'Coder', 'Reviewer'];
   const insertStatus = db.prepare('INSERT OR IGNORE INTO agent_status (agent_name) VALUES (?)');
@@ -243,6 +247,7 @@ function initializeDb(db: DbInstance) {
     insertStatus.run(a);
   }
 
+  // TODO(mock): Auto-sync team members from OpenClaw agent registry
   // Seed team members if empty
   const count = db.prepare('SELECT COUNT(*) as c FROM team_members').get() as { c: number };
   if (count.c === 0) {

@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     const userMsg = db.prepare('SELECT * FROM chat_messages WHERE id = ?').get(userResult.lastInsertRowid) as ChatMessage;
 
+    // TODO(mock): Wire to OpenClaw session API for real agent responses
     // Save mock assistant response
     const agentMsg = `Message received. ${agent} is processing...`;
     const agentResult = db.prepare(

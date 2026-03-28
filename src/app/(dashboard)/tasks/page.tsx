@@ -141,108 +141,143 @@ function TaskDetailModal({ task, assignees, projects, onClose, onUpdated }: Task
 
   const projectName = projects.find((p) => p.id === task.project_id)?.name;
 
+  const statusLabel = task.status === 'todo' ? 'To Do' : task.status === 'in_progress' ? 'In Progress' : 'Done';
+  const statusColor = task.status === 'done' ? 'bg-green-900/40 text-green-400 border-green-700' : task.status === 'in_progress' ? 'bg-yellow-900/40 text-yellow-400 border-yellow-700' : 'bg-slate-700 text-slate-300 border-slate-600';
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
-          <h2 className="text-lg font-semibold text-white truncate pr-4">{task.title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700 flex-shrink-0">
-            <X size={18} />
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 lg:p-8">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 lg:px-8 py-5 border-b border-slate-700 flex-shrink-0">
+          <div className="flex-1 min-w-0 pr-4">
+            <h2 className="text-xl font-bold text-white leading-snug mb-2">{task.title}</h2>
+            <div className="flex flex-wrap gap-2">
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${statusColor}`}>
+                {statusLabel}
+              </span>
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PRIORITY_BADGE[task.priority]}`}>
+                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_DOT[task.priority]}`} />
+                {task.priority === 'med' ? 'Medium' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+              </span>
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
+                @{task.assignee}
+              </span>
+              {projectName && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-900/40 text-cyan-400 border border-cyan-800 flex items-center gap-1">
+                  <FolderKanban size={10} /> {projectName}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-700 flex-shrink-0 transition-colors">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
-          {/* Meta */}
-          <div className="flex flex-wrap gap-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_BADGE[task.priority]}`}>
-              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_DOT[task.priority]}`} />
-              {task.priority === 'med' ? 'Medium' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
-              @{task.assignee}
-            </span>
-            {projectName && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-900/40 text-cyan-400 border border-cyan-800 flex items-center gap-1">
-                <FolderKanban size={10} /> {projectName}
-              </span>
-            )}
-          </div>
-
-          {task.description && (
-            <p className="text-slate-300 text-sm leading-relaxed">{task.description}</p>
-          )}
-
-          {/* Subtasks */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
-                <ListTree size={14} /> Subtasks
-              </h3>
-              <button
-                onClick={() => setAddingSubtask(true)}
-                className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-              >
-                <Plus size={12} /> Add
-              </button>
+        {/* Body — two columns on desktop */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-col lg:flex-row">
+            {/* Left: Description */}
+            <div className="flex-1 px-6 lg:px-8 py-6 lg:border-r border-slate-700 min-w-0">
+              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Description</h3>
+              {task.description ? (
+                <div className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                  {task.description}
+                </div>
+              ) : (
+                <p className="text-slate-600 text-sm italic">No description</p>
+              )}
             </div>
 
-            {loadingSubtasks ? (
-              <div className="text-slate-500 text-xs text-center py-3">
-                <Loader2 size={14} className="animate-spin inline mr-1" /> Loading…
-              </div>
-            ) : subtasks.length === 0 && !addingSubtask ? (
-              <div className="text-slate-600 text-xs text-center py-3 border border-dashed border-slate-700 rounded-lg">
-                No subtasks yet
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {subtasks.map((sub) => (
-                  <div key={sub.id} className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-3 py-2 group">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PRIORITY_DOT[sub.priority]}`} />
-                    <span className="text-sm text-slate-200 flex-1 truncate">{sub.title}</span>
-                    <button
-                      onClick={() => handleDeleteSubtask(sub.id)}
-                      className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all"
-                    >
-                      <X size={12} />
-                    </button>
+            {/* Right: Subtasks + metadata */}
+            <div className="w-full lg:w-80 flex-shrink-0 px-6 lg:px-6 py-6 border-t lg:border-t-0 border-slate-700">
+              {/* Subtasks */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ListTree size={14} /> Subtasks
+                  </h3>
+                  <button
+                    onClick={() => setAddingSubtask(true)}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-cyan-900/20 transition-colors"
+                  >
+                    <Plus size={12} /> Add
+                  </button>
+                </div>
+
+                {loadingSubtasks ? (
+                  <div className="text-slate-500 text-xs text-center py-4">
+                    <Loader2 size={14} className="animate-spin inline mr-1" /> Loading…
                   </div>
-                ))}
-              </div>
-            )}
+                ) : subtasks.length === 0 && !addingSubtask ? (
+                  <div className="text-slate-600 text-xs text-center py-6 border border-dashed border-slate-700 rounded-xl">
+                    No subtasks yet — click Add to create one
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {subtasks.map((sub) => (
+                      <div key={sub.id} className="flex items-center gap-2 bg-slate-700/50 rounded-xl px-3 py-2.5 group hover:bg-slate-700/70 transition-colors">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[sub.priority]}`} />
+                        <span className="text-sm text-slate-200 flex-1">{sub.title}</span>
+                        <button
+                          onClick={() => handleDeleteSubtask(sub.id)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all p-0.5"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-            {addingSubtask && (
-              <div className="mt-2 flex gap-2">
-                <input
-                  autoFocus
-                  value={newSubtaskTitle}
-                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') setAddingSubtask(false); }}
-                  placeholder="Subtask title…"
-                  className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                />
-                <button
-                  onClick={handleAddSubtask}
-                  disabled={savingSubtask || !newSubtaskTitle.trim()}
-                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-lg text-sm"
-                >
-                  {savingSubtask ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
-                </button>
-                <button
-                  onClick={() => setAddingSubtask(false)}
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm"
-                >
-                  Cancel
-                </button>
+                {addingSubtask && (
+                  <div className="mt-3 space-y-2">
+                    <input
+                      autoFocus
+                      value={newSubtaskTitle}
+                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') setAddingSubtask(false); }}
+                      placeholder="Subtask title…"
+                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddSubtask}
+                        disabled={savingSubtask || !newSubtaskTitle.trim()}
+                        className="flex-1 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-xl text-sm font-medium transition-colors"
+                      >
+                        {savingSubtask ? <Loader2 size={12} className="animate-spin" /> : 'Add Subtask'}
+                      </button>
+                      <button
+                        onClick={() => setAddingSubtask(false)}
+                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-sm transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
 
-        <div className="px-6 pb-6 flex-shrink-0 border-t border-slate-700 pt-4">
-          <div className="text-xs text-slate-500">
-            Created {new Date(task.created_at).toLocaleDateString()}
-            {' · '}Updated {new Date(task.updated_at).toLocaleDateString()}
+              {/* Metadata */}
+              <div className="border-t border-slate-700 pt-4 space-y-2">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Details</h3>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Created</span>
+                  <span className="text-slate-300">{new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Updated</span>
+                  <span className="text-slate-300">{new Date(task.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+                {task.id && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Task ID</span>
+                    <span className="text-slate-400 font-mono">#{task.id}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -736,57 +771,58 @@ export default function TasksPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-              <h2 className="text-lg font-semibold text-white">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 lg:p-8">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 lg:px-8 py-5 border-b border-slate-700">
+              <h2 className="text-xl font-bold text-white">
                 {editingTask ? 'Edit Task' : 'New Task'}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700"
+                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-700 transition-colors"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 lg:px-8 space-y-5 overflow-y-auto flex-1">
               {error && (
-                <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-2.5 text-red-400 text-sm">
+                <div className="bg-red-900/30 border border-red-700 rounded-xl px-4 py-3 text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Title *</label>
+                <label className="block text-sm font-semibold text-slate-300 mb-2">Title *</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   placeholder="Task title"
-                  className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-base placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
+                <label className="block text-sm font-semibold text-slate-300 mb-2">Description</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Optional description..."
-                  rows={3}
-                  className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none"
+                  placeholder="Task details, requirements, notes..."
+                  rows={8}
+                  className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-sm leading-relaxed placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-y min-h-[120px]"
                 />
+                <p className="text-xs text-slate-600 mt-1.5">Supports multi-line text. Drag corner to resize.</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Assignee</label>
+                  <label className="block text-sm font-semibold text-slate-300 mb-2">Assignee</label>
                   <select
                     value={form.assignee}
                     onChange={(e) => setForm({ ...form, assignee: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500"
                   >
                     {assignees.map((name) => (
                       <option key={name} value={name}>{name}</option>
@@ -794,26 +830,23 @@ export default function TasksPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Priority</label>
+                  <label className="block text-sm font-semibold text-slate-300 mb-2">Priority</label>
                   <select
                     value={form.priority}
                     onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="low">Low</option>
                     <option value="med">Medium</option>
                     <option value="high">High</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Status</label>
+                  <label className="block text-sm font-semibold text-slate-300 mb-2">Status</label>
                   <select
                     value={form.status}
                     onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
@@ -821,12 +854,12 @@ export default function TasksPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Project</label>
+                  <label className="block text-sm font-semibold text-slate-300 mb-2">Project</label>
                   <div className="relative">
                     <select
                       value={form.project_id}
                       onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8"
+                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8"
                     >
                       <option value="">None</option>
                       {projects.map((p) => (
@@ -839,17 +872,17 @@ export default function TasksPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 px-6 pb-6">
+            <div className="flex gap-3 px-6 lg:px-8 py-5 border-t border-slate-700">
               <button
                 onClick={() => setShowModal(false)}
-                className="flex-1 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium text-sm transition-colors"
+                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium text-sm transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
               >
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 {editingTask ? 'Save Changes' : 'Create Task'}
