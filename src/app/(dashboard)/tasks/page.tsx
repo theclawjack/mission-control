@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight, X, Loader2, FolderKanban, ListTree, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight, X, Loader2, FolderKanban, ListTree, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import {
   DragDropContext,
   Droppable,
@@ -273,7 +273,8 @@ function TaskCard({ task, projects, onEdit, onDelete, onMove, onOpenDetail, stat
       <div className="flex items-start justify-between gap-2 mb-2">
         <button
           onClick={() => onOpenDetail(task)}
-          className="font-semibold text-slate-100 text-sm leading-snug flex-1 text-left hover:text-cyan-400 transition-colors"
+          className="font-semibold text-slate-100 text-sm leading-snug flex-1 text-left hover:text-cyan-400 hover:underline underline-offset-2 transition-colors"
+          title="Click to view details & subtasks"
         >
           {task.title}
         </button>
@@ -362,6 +363,9 @@ export default function TasksPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<Status>('todo');
+  const [filterAssignee, setFilterAssignee] = useState<string>('all');
+  const [doneCollapsed, setDoneCollapsed] = useState(true);
+  const DONE_PREVIEW_COUNT = 5;
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -518,18 +522,22 @@ export default function TasksPage() {
     }
   }
 
+  const filteredTasks = filterAssignee === 'all'
+    ? tasks
+    : tasks.filter((t) => t.assignee === filterAssignee);
+
   const grouped = COLUMNS.reduce<Record<Status, Task[]>>((acc, col) => {
-    acc[col.id] = tasks.filter((t) => t.status === col.id);
+    acc[col.id] = filteredTasks.filter((t) => t.status === col.id);
     return acc;
   }, { todo: [], in_progress: [], done: [] });
 
   return (
     <div className="p-6 h-full">
       {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Tasks Board</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{tasks.length} task{tasks.length !== 1 ? 's' : ''} total</p>
+          <p className="text-slate-400 text-sm mt-0.5">{tasks.length} task{tasks.length !== 1 ? 's' : ''} total{filterAssignee !== 'all' ? ` · filtered: ${filteredTasks.length}` : ''}</p>
         </div>
         <button
           onClick={openCreate}
@@ -538,6 +546,39 @@ export default function TasksPage() {
           <Plus size={16} />
           New Task
         </button>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-1.5 text-slate-500 text-xs">
+          <Filter size={12} />
+          <span>Filter:</span>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button
+            onClick={() => setFilterAssignee('all')}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              filterAssignee === 'all'
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'
+            }`}
+          >
+            All
+          </button>
+          {assignees.map((name) => (
+            <button
+              key={name}
+              onClick={() => setFilterAssignee(name)}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                filterAssignee === name
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-slate-200'
+              }`}
+            >
+              @{name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -575,7 +616,22 @@ export default function TasksPage() {
                   No tasks here
                 </div>
               )}
-              {grouped[activeTab].map((task) => {
+              {activeTab === 'done' && grouped.done.length > DONE_PREVIEW_COUNT && (
+                <button
+                  onClick={() => setDoneCollapsed(!doneCollapsed)}
+                  className="w-full text-xs text-slate-400 hover:text-cyan-400 py-1.5 flex items-center justify-center gap-1 transition-colors"
+                >
+                  {doneCollapsed ? (
+                    <><ChevronDown size={12} /> Showing {DONE_PREVIEW_COUNT} of {grouped.done.length} — tap to expand</>
+                  ) : (
+                    <><ChevronUp size={12} /> Collapse to {DONE_PREVIEW_COUNT}</>
+                  )}
+                </button>
+              )}
+              {(activeTab === 'done' && doneCollapsed
+                ? grouped[activeTab].slice(0, DONE_PREVIEW_COUNT)
+                : grouped[activeTab]
+              ).map((task) => {
                 const statusIdx = STATUS_ORDER.indexOf(task.status);
                 return (
                   <TaskCard
@@ -623,7 +679,23 @@ export default function TasksPage() {
                             No tasks here
                           </div>
                         )}
-                        {grouped[col.id].map((task, index) => {
+                        {/* Collapse done column when too many */}
+                        {col.id === 'done' && grouped.done.length > DONE_PREVIEW_COUNT && (
+                          <button
+                            onClick={() => setDoneCollapsed(!doneCollapsed)}
+                            className="w-full text-xs text-slate-400 hover:text-cyan-400 py-1.5 mb-1 flex items-center justify-center gap-1 transition-colors"
+                          >
+                            {doneCollapsed ? (
+                              <><ChevronDown size={12} /> Showing {DONE_PREVIEW_COUNT} of {grouped.done.length} — click to expand</>
+                            ) : (
+                              <><ChevronUp size={12} /> Collapse to {DONE_PREVIEW_COUNT}</>
+                            )}
+                          </button>
+                        )}
+                        {(col.id === 'done' && doneCollapsed
+                          ? grouped[col.id].slice(0, DONE_PREVIEW_COUNT)
+                          : grouped[col.id]
+                        ).map((task, index) => {
                           const statusIdx = STATUS_ORDER.indexOf(task.status);
                           return (
                             <Draggable key={task.id} draggableId={String(task.id)} index={index}>
