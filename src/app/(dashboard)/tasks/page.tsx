@@ -1,7 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight, X, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight, X, Loader2, FolderKanban, ListTree, ChevronDown } from 'lucide-react';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from '@hello-pangea/dnd';
 
 interface Task {
   id: number;
@@ -10,8 +16,17 @@ interface Task {
   assignee: string;
   priority: 'low' | 'med' | 'high';
   status: 'todo' | 'in_progress' | 'done';
+  project_id: number | null;
+  parent_id: number | null;
+  subtask_count: number;
   created_at: string;
   updated_at: string;
+}
+
+interface Project {
+  id: number;
+  name: string;
+  status: string;
 }
 
 type Status = 'todo' | 'in_progress' | 'done';
@@ -57,17 +72,296 @@ const emptyForm = {
   assignee: 'Jet',
   priority: 'med',
   status: 'todo',
+  project_id: '' as string | number,
 };
+
+// ─── Task Detail Modal ─────────────────────────────────────────────────────────
+
+interface TaskDetailModalProps {
+  task: Task;
+  assignees: string[];
+  projects: Project[];
+  onClose: () => void;
+  onUpdated: () => void;
+}
+
+function TaskDetailModal({ task, assignees, projects, onClose, onUpdated }: TaskDetailModalProps) {
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(true);
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [savingSubtask, setSavingSubtask] = useState(false);
+
+  const fetchSubtasks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`);
+      const data = await res.json();
+      setSubtasks(Array.isArray(data.subtasks) ? data.subtasks : []);
+    } catch {
+      setSubtasks([]);
+    } finally {
+      setLoadingSubtasks(false);
+    }
+  }, [task.id]);
+
+  useEffect(() => { fetchSubtasks(); }, [fetchSubtasks]);
+
+  async function handleAddSubtask() {
+    if (!newSubtaskTitle.trim()) return;
+    setSavingSubtask(true);
+    try {
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newSubtaskTitle.trim(),
+          parent_id: task.id,
+          status: 'todo',
+          assignee: task.assignee,
+          priority: task.priority,
+          project_id: task.project_id,
+        }),
+      });
+      setNewSubtaskTitle('');
+      setAddingSubtask(false);
+      fetchSubtasks();
+      onUpdated();
+    } catch {
+      // ignore
+    } finally {
+      setSavingSubtask(false);
+    }
+  }
+
+  async function handleDeleteSubtask(id: number) {
+    await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+    fetchSubtasks();
+    onUpdated();
+  }
+
+  const projectName = projects.find((p) => p.id === task.project_id)?.name;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+          <h2 className="text-lg font-semibold text-white truncate pr-4">{task.title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-700 flex-shrink-0">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Meta */}
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_BADGE[task.priority]}`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_DOT[task.priority]}`} />
+              {task.priority === 'med' ? 'Medium' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+            </span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
+              @{task.assignee}
+            </span>
+            {projectName && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-900/40 text-cyan-400 border border-cyan-800 flex items-center gap-1">
+                <FolderKanban size={10} /> {projectName}
+              </span>
+            )}
+          </div>
+
+          {task.description && (
+            <p className="text-slate-300 text-sm leading-relaxed">{task.description}</p>
+          )}
+
+          {/* Subtasks */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                <ListTree size={14} /> Subtasks
+              </h3>
+              <button
+                onClick={() => setAddingSubtask(true)}
+                className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+              >
+                <Plus size={12} /> Add
+              </button>
+            </div>
+
+            {loadingSubtasks ? (
+              <div className="text-slate-500 text-xs text-center py-3">
+                <Loader2 size={14} className="animate-spin inline mr-1" /> Loading…
+              </div>
+            ) : subtasks.length === 0 && !addingSubtask ? (
+              <div className="text-slate-600 text-xs text-center py-3 border border-dashed border-slate-700 rounded-lg">
+                No subtasks yet
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {subtasks.map((sub) => (
+                  <div key={sub.id} className="flex items-center gap-2 bg-slate-700/50 rounded-lg px-3 py-2 group">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${PRIORITY_DOT[sub.priority]}`} />
+                    <span className="text-sm text-slate-200 flex-1 truncate">{sub.title}</span>
+                    <button
+                      onClick={() => handleDeleteSubtask(sub.id)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {addingSubtask && (
+              <div className="mt-2 flex gap-2">
+                <input
+                  autoFocus
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubtask(); if (e.key === 'Escape') setAddingSubtask(false); }}
+                  placeholder="Subtask title…"
+                  className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+                <button
+                  onClick={handleAddSubtask}
+                  disabled={savingSubtask || !newSubtaskTitle.trim()}
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 text-white rounded-lg text-sm"
+                >
+                  {savingSubtask ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
+                </button>
+                <button
+                  onClick={() => setAddingSubtask(false)}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 flex-shrink-0 border-t border-slate-700 pt-4">
+          <div className="text-xs text-slate-500">
+            Created {new Date(task.created_at).toLocaleDateString()}
+            {' · '}Updated {new Date(task.updated_at).toLocaleDateString()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Task Card ─────────────────────────────────────────────────────────────────
+
+interface TaskCardProps {
+  task: Task;
+  projects: Project[];
+  onEdit: (task: Task) => void;
+  onDelete: (id: number) => void;
+  onMove: (task: Task, direction: 'left' | 'right') => void;
+  onOpenDetail: (task: Task) => void;
+  statusIdx: number;
+}
+
+function TaskCard({ task, projects, onEdit, onDelete, onMove, onOpenDetail, statusIdx }: TaskCardProps) {
+  const projectName = projects.find((p) => p.id === task.project_id)?.name;
+
+  return (
+    <div
+      className={`bg-slate-800 border border-slate-700 border-l-4 ${PRIORITY_BORDER[task.priority]} rounded-xl p-4 hover:border-slate-600 transition-colors group`}
+    >
+      {/* Title */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <button
+          onClick={() => onOpenDetail(task)}
+          className="font-semibold text-slate-100 text-sm leading-snug flex-1 text-left hover:text-cyan-400 transition-colors"
+        >
+          {task.title}
+        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button
+            onClick={() => onEdit(task)}
+            className="p-1 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700"
+            title="Edit"
+          >
+            <Edit2 size={13} />
+          </button>
+          <button
+            onClick={() => onDelete(task.id)}
+            className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"
+            title="Delete"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Description */}
+      {task.description && (
+        <p className="text-slate-400 text-xs leading-relaxed mb-3 line-clamp-2">
+          {task.description}
+        </p>
+      )}
+
+      {/* Badges */}
+      <div className="flex items-center flex-wrap gap-1.5 mb-3">
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_BADGE[task.priority]}`}>
+          <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_DOT[task.priority]}`} />
+          {task.priority === 'med' ? 'Medium' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+        </span>
+        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
+          @{task.assignee}
+        </span>
+        {projectName && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-900/40 text-cyan-400 border border-cyan-800 flex items-center gap-1">
+            <FolderKanban size={10} /> {projectName}
+          </span>
+        )}
+        {task.subtask_count > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-400 border border-purple-800 flex items-center gap-1">
+            <ListTree size={10} /> {task.subtask_count}
+          </span>
+        )}
+      </div>
+
+      {/* Move buttons */}
+      <div className="flex gap-1.5">
+        {statusIdx > 0 && (
+          <button
+            onClick={() => onMove(task, 'left')}
+            className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+          >
+            <ChevronLeft size={12} />
+            {COLUMNS[statusIdx - 1].label}
+          </button>
+        )}
+        {statusIdx < STATUS_ORDER.length - 1 && (
+          <button
+            onClick={() => onMove(task, 'right')}
+            className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors ml-auto"
+          >
+            {COLUMNS[statusIdx + 1].label}
+            <ChevronRight size={12} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [assignees, setAssignees] = useState<string[]>(['Jet', 'Jack']);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<Status>('todo');
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -78,6 +372,16 @@ export default function TasksPage() {
       setTasks([]);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      setProjects(Array.isArray(data) ? data : []);
+    } catch {
+      setProjects([]);
     }
   }, []);
 
@@ -97,7 +401,8 @@ export default function TasksPage() {
   useEffect(() => {
     fetchTasks();
     fetchAssignees();
-  }, [fetchTasks, fetchAssignees]);
+    fetchProjects();
+  }, [fetchTasks, fetchAssignees, fetchProjects]);
 
   function openCreate() {
     setEditingTask(null);
@@ -114,6 +419,7 @@ export default function TasksPage() {
       assignee: task.assignee,
       priority: task.priority,
       status: task.status,
+      project_id: task.project_id ?? '',
     });
     setError('');
     setShowModal(true);
@@ -127,17 +433,21 @@ export default function TasksPage() {
     setSaving(true);
     setError('');
     try {
+      const payload = {
+        ...form,
+        project_id: form.project_id === '' ? null : Number(form.project_id),
+      };
       if (editingTask) {
         await fetch(`/api/tasks/${editingTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       } else {
         await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
       }
       setShowModal(false);
@@ -163,6 +473,21 @@ export default function TasksPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: STATUS_ORDER[newIdx] }),
+    });
+    fetchTasks();
+  }
+
+  async function onDragEnd(result: DropResult) {
+    if (!result.destination) return;
+    const sourceCol = result.source.droppableId as Status;
+    const destCol = result.destination.droppableId as Status;
+    if (sourceCol === destCol) return;
+
+    const taskId = parseInt(result.draggableId);
+    await fetch(`/api/tasks/${taskId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: destCol }),
     });
     fetchTasks();
   }
@@ -194,106 +519,124 @@ export default function TasksPage() {
           <Loader2 className="animate-spin text-cyan-400" size={32} />
         </div>
       ) : (
-        /* Kanban columns */
-        <div className="grid grid-cols-3 gap-4 h-full">
-          {COLUMNS.map((col) => (
-            <div key={col.id} className="flex flex-col min-h-0">
-              {/* Column header */}
-              <div className={`flex items-center justify-between px-4 py-3 rounded-xl border mb-3 ${COLUMN_HEADER_STYLE[col.id]}`}>
-                <span className={`font-semibold text-sm ${COLUMN_HEADER_TEXT[col.id]}`}>
+        <>
+          {/* Mobile tab view */}
+          <div className="lg:hidden">
+            {/* Tab buttons */}
+            <div className="flex gap-2 mb-4">
+              {COLUMNS.map((col) => (
+                <button
+                  key={col.id}
+                  onClick={() => setActiveTab(col.id)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    activeTab === col.id
+                      ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                >
                   {col.label}
-                </span>
-                <span className="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-0.5 rounded-full">
-                  {grouped[col.id].length}
-                </span>
-              </div>
-
-              {/* Task cards */}
-              <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                {grouped[col.id].length === 0 && (
-                  <div className="text-center text-slate-600 text-sm py-8 border-2 border-dashed border-slate-800 rounded-xl">
-                    No tasks here
-                  </div>
-                )}
-                {grouped[col.id].map((task) => {
-                  const statusIdx = STATUS_ORDER.indexOf(task.status);
-                  return (
-                    <div
-                      key={task.id}
-                      className={`bg-slate-800 border border-slate-700 border-l-4 ${PRIORITY_BORDER[task.priority]} rounded-xl p-4 hover:border-slate-600 transition-colors group`}
-                    >
-                      {/* Title */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-semibold text-slate-100 text-sm leading-snug flex-1">
-                          {task.title}
-                        </h3>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                          <button
-                            onClick={() => openEdit(task)}
-                            className="p-1 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-700"
-                            title="Edit"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(task.id)}
-                            className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700"
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      {task.description && (
-                        <p className="text-slate-400 text-xs leading-relaxed mb-3 line-clamp-2">
-                          {task.description}
-                        </p>
-                      )}
-
-                      {/* Badges */}
-                      <div className="flex items-center flex-wrap gap-1.5 mb-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_BADGE[task.priority]}`}>
-                          <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${PRIORITY_DOT[task.priority]}`} />
-                          {task.priority === 'med' ? 'Medium' : task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
-                          @{task.assignee}
-                        </span>
-                      </div>
-
-                      {/* Move buttons */}
-                      <div className="flex gap-1.5">
-                        {statusIdx > 0 && (
-                          <button
-                            onClick={() => moveTask(task, 'left')}
-                            className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
-                          >
-                            <ChevronLeft size={12} />
-                            {COLUMNS[statusIdx - 1].label}
-                          </button>
-                        )}
-                        {statusIdx < STATUS_ORDER.length - 1 && (
-                          <button
-                            onClick={() => moveTask(task, 'right')}
-                            className="flex items-center gap-1 text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors ml-auto"
-                          >
-                            {COLUMNS[statusIdx + 1].label}
-                            <ChevronRight size={12} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                  <span className="text-xs opacity-70 bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {grouped[col.id].length}
+                  </span>
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Active tab cards */}
+            <div className="space-y-3">
+              {grouped[activeTab].length === 0 && (
+                <div className="text-center text-slate-600 text-sm py-8 border-2 border-dashed border-slate-800 rounded-xl">
+                  No tasks here
+                </div>
+              )}
+              {grouped[activeTab].map((task) => {
+                const statusIdx = STATUS_ORDER.indexOf(task.status);
+                return (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    projects={projects}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onMove={moveTask}
+                    onOpenDetail={setDetailTask}
+                    statusIdx={statusIdx}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Desktop drag-and-drop kanban */}
+          <DragDropContext onDragEnd={onDragEnd}>
+            <div className="hidden lg:grid grid-cols-3 gap-4 h-full">
+              {COLUMNS.map((col) => (
+                <div key={col.id} className="flex flex-col min-h-0">
+                  {/* Column header */}
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-xl border mb-3 ${COLUMN_HEADER_STYLE[col.id]}`}>
+                    <span className={`font-semibold text-sm ${COLUMN_HEADER_TEXT[col.id]}`}>
+                      {col.label}
+                    </span>
+                    <span className="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                      {grouped[col.id].length}
+                    </span>
+                  </div>
+
+                  {/* Droppable area */}
+                  <Droppable droppableId={col.id}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`flex-1 space-y-3 overflow-y-auto pr-1 min-h-[100px] rounded-xl transition-colors ${
+                          snapshot.isDraggingOver ? 'bg-slate-800/30' : ''
+                        }`}
+                      >
+                        {grouped[col.id].length === 0 && !snapshot.isDraggingOver && (
+                          <div className="text-center text-slate-600 text-sm py-8 border-2 border-dashed border-slate-800 rounded-xl">
+                            No tasks here
+                          </div>
+                        )}
+                        {grouped[col.id].map((task, index) => {
+                          const statusIdx = STATUS_ORDER.indexOf(task.status);
+                          return (
+                            <Draggable key={task.id} draggableId={String(task.id)} index={index}>
+                              {(dragProvided, dragSnapshot) => (
+                                <div
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
+                                  style={{
+                                    ...dragProvided.draggableProps.style,
+                                    opacity: dragSnapshot.isDragging ? 0.85 : 1,
+                                  }}
+                                >
+                                  <TaskCard
+                                    task={task}
+                                    projects={projects}
+                                    onEdit={openEdit}
+                                    onDelete={handleDelete}
+                                    onMove={moveTask}
+                                    onOpenDetail={setDetailTask}
+                                    statusIdx={statusIdx}
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </div>
+              ))}
+            </div>
+          </DragDropContext>
+        </>
       )}
 
-      {/* Modal */}
+      {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
@@ -339,7 +682,7 @@ export default function TasksPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">Assignee</label>
                   <select
@@ -364,6 +707,9 @@ export default function TasksPage() {
                     <option value="high">High</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">Status</label>
                   <select
@@ -375,6 +721,22 @@ export default function TasksPage() {
                     <option value="in_progress">In Progress</option>
                     <option value="done">Done</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Project</label>
+                  <div className="relative">
+                    <select
+                      value={form.project_id}
+                      onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8"
+                    >
+                      <option value="">None</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -397,6 +759,17 @@ export default function TasksPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          assignees={assignees}
+          projects={projects}
+          onClose={() => setDetailTask(null)}
+          onUpdated={() => { fetchTasks(); }}
+        />
       )}
     </div>
   );

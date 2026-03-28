@@ -1,16 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import StatusBanner from '@/components/StatusBanner';
+import SearchPalette from '@/components/SearchPalette';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 flex">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onSearchOpen={() => setSearchOpen(true)} />
 
       {/* Main content — offset on desktop, full width on mobile */}
       <main className="flex-1 lg:ml-64 min-h-screen flex flex-col">
@@ -28,6 +41,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <StatusBanner />
         <div className="flex-1">{children}</div>
       </main>
+
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

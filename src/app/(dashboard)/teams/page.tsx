@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, X, Loader2, Users, Cpu, CheckCircle, Clock, AlertCircle, MinusCircle, type LucideIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, Users, Cpu, CheckCircle, Clock, AlertCircle, MinusCircle, Target, Pencil, Save, type LucideIcon } from 'lucide-react';
 
 interface TeamMember {
   id: number;
@@ -73,6 +73,8 @@ const emptyForm = {
   current_task: '',
 };
 
+const DEFAULT_MISSION = 'Building an autonomous AI operations team that proactively manages, researches, and delivers value.';
+
 export default function TeamsPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +83,12 @@ export default function TeamsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Mission statement state
+  const [mission, setMission] = useState(DEFAULT_MISSION);
+  const [editingMission, setEditingMission] = useState(false);
+  const [missionDraft, setMissionDraft] = useState('');
+  const [savingMission, setSavingMission] = useState(false);
 
   const fetchMembers = useCallback(async () => {
     try {
@@ -94,9 +102,37 @@ export default function TeamsPage() {
     }
   }, []);
 
+  const fetchMission = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings?key=mission_statement');
+      const data = await res.json();
+      if (data.value) setMission(data.value);
+    } catch {
+      // keep default
+    }
+  }, []);
+
+  async function saveMission() {
+    setSavingMission(true);
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'mission_statement', value: missionDraft }),
+      });
+      setMission(missionDraft);
+      setEditingMission(false);
+    } catch {
+      // ignore
+    } finally {
+      setSavingMission(false);
+    }
+  }
+
   useEffect(() => {
     fetchMembers();
-  }, [fetchMembers]);
+    fetchMission();
+  }, [fetchMembers, fetchMission]);
 
   function openCreate() {
     setEditingMember(null);
@@ -159,6 +195,53 @@ export default function TeamsPage() {
 
   return (
     <div className="p-6">
+      {/* Mission Statement */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Target size={18} className="text-cyan-400" />
+            <h2 className="font-semibold text-white text-sm">Mission Statement</h2>
+          </div>
+          {!editingMission ? (
+            <button
+              onClick={() => { setMissionDraft(mission); setEditingMission(true); }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-700 transition-colors"
+              title="Edit mission"
+            >
+              <Pencil size={14} />
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingMission(false)}
+                className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveMission}
+                disabled={savingMission}
+                className="flex items-center gap-1 px-3 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+              >
+                {savingMission ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+        {editingMission ? (
+          <textarea
+            value={missionDraft}
+            onChange={(e) => setMissionDraft(e.target.value)}
+            rows={2}
+            className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-2.5 text-slate-200 text-sm leading-relaxed focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-none"
+            autoFocus
+          />
+        ) : (
+          <p className="text-slate-300 text-sm leading-relaxed italic">&ldquo;{mission}&rdquo;</p>
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

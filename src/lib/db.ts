@@ -46,6 +46,23 @@ function initializeDb(db: DbInstance) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',
+      progress INTEGER DEFAULT 0,
+      priority TEXT DEFAULT 'med',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS memos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -68,6 +85,31 @@ function initializeDb(db: DbInstance) {
     // Column already exists, ignore
   }
 
+  // Migration: add project_id column to tasks
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN project_id INTEGER DEFAULT NULL').run();
+  } catch {
+    // Column already exists, ignore
+  }
+
+  // Migration: add parent_id column to tasks
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN parent_id INTEGER DEFAULT NULL').run();
+  } catch {
+    // Column already exists, ignore
+  }
+
+  // Activity log table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      metadata TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Agent status tracking table
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_status (
@@ -81,7 +123,7 @@ function initializeDb(db: DbInstance) {
   `);
 
   // Seed agent statuses
-  const agentNames = ['Jack', 'Planner', 'Coder', 'Reviewer', 'Writer', 'Debugger'];
+  const agentNames = ['Jack', 'Planner', 'Coder', 'Reviewer'];
   const insertStatus = db.prepare('INSERT OR IGNORE INTO agent_status (agent_name) VALUES (?)');
   for (const a of agentNames) {
     insertStatus.run(a);
@@ -96,10 +138,8 @@ function initializeDb(db: DbInstance) {
     const members = [
       ['Jack', 'Orchestrator', 'claude-opus-4-6', 'active', 'Coordinating mission operations'],
       ['Planner', 'Planning & Strategy', 'claude-sonnet-4-6', 'idle', ''],
-      ['Coder', 'Code Generation', 'claude-haiku-4-5', 'idle', ''],
+      ['Coder', 'Code Generation', 'claude-opus-4-6', 'idle', ''],
       ['Reviewer', 'Code Review & QA', 'claude-sonnet-4-6', 'idle', ''],
-      ['Writer', 'Documentation & Content', 'claude-haiku-4-5', 'idle', ''],
-      ['Debugger', 'Debugging & Troubleshooting', 'claude-sonnet-4-6', 'idle', ''],
     ];
     for (const m of members) {
       ins.run(...m);

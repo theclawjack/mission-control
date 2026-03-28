@@ -188,6 +188,7 @@ function MemoCard({ memo }: { memo: Memo }) {
 export default function RDLabPage() {
   const [memos, setMemos] = useState<Memo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
@@ -200,9 +201,25 @@ export default function RDLabPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  function triggerCycle() {
-    setToast('🧪 R&D cycle triggered');
-    setTimeout(() => setToast(''), 3000);
+  async function triggerCycle() {
+    setTriggering(true);
+    try {
+      const res = await fetch('/api/memos/trigger', { method: 'POST' });
+      if (res.ok) {
+        const newMemo = await res.json();
+        setMemos((prev) => [newMemo, ...prev]);
+        setToast('🧪 R&D cycle triggered');
+        setTimeout(() => setToast(''), 3000);
+      } else {
+        setToast('❌ Failed to trigger cycle');
+        setTimeout(() => setToast(''), 3000);
+      }
+    } catch {
+      setToast('❌ Network error');
+      setTimeout(() => setToast(''), 3000);
+    } finally {
+      setTriggering(false);
+    }
   }
 
   return (
@@ -229,10 +246,11 @@ export default function RDLabPage() {
             </div>
             <button
               onClick={triggerCycle}
-              className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 hover:border-cyan-500/60 text-cyan-300 rounded-xl text-sm font-medium transition-all duration-150"
+              disabled={triggering}
+              className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 hover:border-cyan-500/60 text-cyan-300 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-60"
             >
-              <RefreshCw size={15} />
-              Run R&amp;D Cycle
+              <RefreshCw size={15} className={triggering ? 'animate-spin' : ''} />
+              {triggering ? 'Triggering…' : 'Run R&D Cycle'}
             </button>
           </div>
         </div>

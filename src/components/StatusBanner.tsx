@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface AgentStatus {
   agent_name: string;
@@ -12,8 +12,11 @@ interface AgentStatus {
 
 export default function StatusBanner() {
   const [statuses, setStatuses] = useState<AgentStatus[]>([]);
+  const esRef = useRef<EventSource | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
+  function startPolling() {
+    if (pollingRef.current) return;
     const fetchStatus = async () => {
       try {
         const res = await fetch('/api/status');
@@ -24,8 +27,39 @@ export default function StatusBanner() {
       }
     };
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
+    pollingRef.current = setInterval(fetchStatus, 30000);
+  }
+
+  useEffect(() => {
+    // Try SSE first
+    try {
+      const es = new EventSource('/api/status/stream');
+      esRef.current = es;
+
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (Array.isArray(data)) setStatuses(data);
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        esRef.current = null;
+        // Fall back to polling
+        startPolling();
+      };
+    } catch {
+      startPolling();
+    }
+
+    return () => {
+      esRef.current?.close();
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const working = statuses.filter((s) => s.effective_status === 'working');

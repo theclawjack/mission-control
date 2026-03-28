@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { logActivity } from '@/lib/activity';
 
 export async function GET(request: NextRequest) {
   const authErr = requireAuth(request); if (authErr) return authErr;
@@ -30,12 +31,16 @@ export async function POST(request: NextRequest) {
     if (!agent) {
       return NextResponse.json({ error: 'agent is required' }, { status: 400 });
     }
+    const existing = db.prepare('SELECT * FROM agent_status WHERE agent_name = ?').get(agent) as Record<string, unknown> | undefined;
     db.prepare(
       `UPDATE agent_status SET status = ?, current_activity = ?, last_seen = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE agent_name = ?`
     ).run(status || 'idle', activity || '', agent);
     const updated = db.prepare('SELECT * FROM agent_status WHERE agent_name = ?').get(agent);
     if (!updated) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+    }
+    if (existing && existing.status !== (status || 'idle')) {
+      logActivity('agent_status_change', `${agent} changed status to ${status || 'idle'}`, { agent, from: existing.status, to: status || 'idle' });
     }
     return NextResponse.json(updated);
   } catch (e) {

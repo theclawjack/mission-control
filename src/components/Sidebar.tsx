@@ -2,22 +2,29 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Rocket, CheckSquare, Brain, CalendarDays, Users, LogOut, FlaskConical, X } from 'lucide-react';
+import {
+  Rocket, LayoutDashboard, CheckSquare, FolderKanban, Brain,
+  CalendarDays, Users, LogOut, FlaskConical, X, Search, Settings,
+} from 'lucide-react';
 
 const navItems = [
+  { href: '/home', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/memory', label: 'Memory', icon: Brain },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/teams', label: 'Teams', icon: Users },
   { href: '/rd', label: 'R&D Lab', icon: FlaskConical },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  onSearchOpen?: () => void;
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ open, onClose, onSearchOpen }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -65,8 +72,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </button>
         </div>
 
+        {/* Search button */}
+        <div className="px-3 pt-3">
+          <button
+            onClick={() => { onSearchOpen?.(); onClose(); }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 text-sm transition-colors"
+          >
+            <Search size={15} />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="text-xs px-1.5 py-0.5 bg-slate-700 rounded text-slate-500">⌘K</kbd>
+          </button>
+        </div>
+
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-3 space-y-1">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + '/');
             return (

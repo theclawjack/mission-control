@@ -8,21 +8,22 @@
     "start": "next start -p 3100"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
+    "better-sqlite3": "^9.4.3",
+    "lucide-react": "^0.363.0",
+    "marked": "^9.1.6",
     "next": "14.2.5",
     "react": "^18",
-    "react-dom": "^18",
-    "better-sqlite3": "^9.4.3",
-    "marked": "^9.1.6",
-    "lucide-react": "^0.363.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@types/better-sqlite3": "^7.6.8",
-    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10",
     "postcss": "^8",
-    "autoprefixer": "^10"
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
   }
 }
