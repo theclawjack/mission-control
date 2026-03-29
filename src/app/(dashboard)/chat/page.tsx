@@ -39,28 +39,105 @@ function MessageContent({ role, content }: { role: string; content: string }) {
   return <p className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap">{content}</p>;
 }
 
+function TypingIndicator({ agent }: { agent: string }) {
+  return (
+    <div className="flex gap-3 group">
+      {/* Avatar */}
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
+        <Bot size={14} />
+      </div>
+      {/* Bubble */}
+      <div className="flex flex-col items-start">
+        <div className="flex items-center gap-2 mb-1 text-xs">
+          <span className={`font-medium ${AGENT_COLORS[agent] || 'text-cyan-400'}`}>{agent}</span>
+          <span className="text-slate-600 italic">thinking...</span>
+        </div>
+        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-slate-800 border border-slate-700">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-cyan-400/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 bg-cyan-400/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 bg-cyan-400/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [agent, setAgent] = useState('Jack');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [agentThinking, setAgentThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const noNewMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMessageCountRef = useRef<number>(0);
 
-  const fetchMessages = useCallback(async () => {
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    if (noNewMsgTimerRef.current) {
+      clearTimeout(noNewMsgTimerRef.current);
+      noNewMsgTimerRef.current = null;
+    }
+    setAgentThinking(false);
+  }, []);
+
+  const fetchMessages = useCallback(async (isPolling = false) => {
     try {
       const res = await fetch('/api/chat');
       if (res.ok) {
         const data = await res.json() as ChatMessage[];
-        setMessages(Array.isArray(data) ? data : []);
+        const msgs = Array.isArray(data) ? data : [];
+        setMessages(msgs);
+
+        if (isPolling) {
+          const prevCount = lastMessageCountRef.current;
+          const newCount = msgs.length;
+          if (newCount > prevCount) {
+            // New messages arrived — reset the no-new-msg timer
+            lastMessageCountRef.current = newCount;
+            if (noNewMsgTimerRef.current) clearTimeout(noNewMsgTimerRef.current);
+            // Stop polling after 10s of no new messages
+            noNewMsgTimerRef.current = setTimeout(() => {
+              stopPolling();
+            }, 10000);
+          }
+        } else {
+          lastMessageCountRef.current = msgs.length;
+        }
       }
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [stopPolling]);
+
+  const startPolling = useCallback((currentCount: number) => {
+    lastMessageCountRef.current = currentCount;
+    setAgentThinking(true);
+
+    // Clear any existing polling
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (noNewMsgTimerRef.current) clearTimeout(noNewMsgTimerRef.current);
+
+    // Poll every 3 seconds
+    pollIntervalRef.current = setInterval(() => {
+      fetchMessages(true);
+    }, 3000);
+
+    // Stop after 60s max (agent timeout)
+    noNewMsgTimerRef.current = setTimeout(() => {
+      stopPolling();
+    }, 60000);
+  }, [fetchMessages, stopPolling]);
 
   useEffect(() => {
     fetchMessages();
@@ -68,7 +145,14 @@ export default function ChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, agentThinking]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
 
   async function handleSend() {
     if (!input.trim() || sending) return;
@@ -83,8 +167,13 @@ export default function ChatPage() {
         body: JSON.stringify({ content, agent }),
       });
       if (res.ok) {
-        const data = await res.json() as { userMessage: ChatMessage; assistantMessage: ChatMessage };
-        setMessages((prev) => [...prev, data.userMessage, data.assistantMessage]);
+        const data = await res.json() as { userMessage: ChatMessage };
+        setMessages((prev) => {
+          const updated = [...prev, data.userMessage];
+          // Start polling for agent response
+          startPolling(updated.length);
+          return updated;
+        });
       }
     } catch {
       // ignore
@@ -108,10 +197,12 @@ export default function ChatPage() {
 
   async function clearAll() {
     if (!confirm('Clear all chat history?')) return;
+    stopPolling();
     for (const msg of messages) {
       await fetch(`/api/chat/${msg.id}`, { method: 'DELETE' });
     }
     setMessages([]);
+    lastMessageCountRef.current = 0;
   }
 
   return (
@@ -154,7 +245,7 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full text-slate-500 text-sm">
             Loading messages...
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !agentThinking ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-16 h-16 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex items-center justify-center mb-4">
               <MessageSquare size={28} className="text-cyan-400 opacity-60" />
@@ -163,48 +254,51 @@ export default function ChatPage() {
             <p className="text-slate-600 text-sm mt-1">Send a message to start chatting with an agent</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex gap-3 group ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
-            >
-              {/* Avatar */}
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                msg.role === 'user'
-                  ? 'bg-slate-700 text-slate-300'
-                  : 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-400'
-              }`}>
-                {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-              </div>
-
-              {/* Bubble */}
-              <div className={`flex flex-col max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                {/* Name + time */}
-                <div className={`flex items-center gap-2 mb-1 text-xs ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <span className={`font-medium ${msg.role === 'assistant' ? (AGENT_COLORS[msg.agent] || 'text-cyan-400') : 'text-slate-400'}`}>
-                    {msg.role === 'user' ? 'You' : msg.agent}
-                  </span>
-                  <span className="text-slate-600">{formatTime(msg.created_at)}</span>
-                </div>
-                {/* Content */}
-                <div className={`relative px-4 py-3 rounded-2xl text-sm ${
+          <>
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3 group ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+              >
+                {/* Avatar */}
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   msg.role === 'user'
-                    ? 'bg-cyan-600/20 border border-cyan-600/30 text-slate-100 rounded-tr-sm'
-                    : 'bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-sm'
+                    ? 'bg-slate-700 text-slate-300'
+                    : 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-400'
                 }`}>
-                  <MessageContent role={msg.role} content={msg.content} />
-                  {/* Delete button */}
-                  <button
-                    onClick={() => handleDelete(msg.id)}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-slate-700 border border-slate-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-400"
-                    aria-label="Delete message"
-                  >
-                    <Trash2 size={10} />
-                  </button>
+                  {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                </div>
+
+                {/* Bubble */}
+                <div className={`flex flex-col max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  {/* Name + time */}
+                  <div className={`flex items-center gap-2 mb-1 text-xs ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <span className={`font-medium ${msg.role === 'assistant' ? (AGENT_COLORS[msg.agent] || 'text-cyan-400') : 'text-slate-400'}`}>
+                      {msg.role === 'user' ? 'You' : msg.agent}
+                    </span>
+                    <span className="text-slate-600">{formatTime(msg.created_at)}</span>
+                  </div>
+                  {/* Content */}
+                  <div className={`relative px-4 py-3 rounded-2xl text-sm ${
+                    msg.role === 'user'
+                      ? 'bg-cyan-600/20 border border-cyan-600/30 text-slate-100 rounded-tr-sm'
+                      : 'bg-slate-800 border border-slate-700 text-slate-200 rounded-tl-sm'
+                  }`}>
+                    <MessageContent role={msg.role} content={msg.content} />
+                    {/* Delete button */}
+                    <button
+                      onClick={() => handleDelete(msg.id)}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-slate-700 border border-slate-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-400"
+                      aria-label="Delete message"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+            {agentThinking && <TypingIndicator agent={agent} />}
+          </>
         )}
         <div ref={bottomRef} />
       </div>
@@ -234,7 +328,7 @@ export default function ChatPage() {
           </button>
         </div>
         <div className="text-xs text-slate-600 mt-2 px-1">
-          Talking to <span className={AGENT_COLORS[agent] || 'text-cyan-400'}>{agent}</span> · OpenClaw integration coming soon
+          Talking to <span className={AGENT_COLORS[agent] || 'text-cyan-400'}>{agent}</span> · Connected to OpenClaw
         </div>
       </div>
     </div>
