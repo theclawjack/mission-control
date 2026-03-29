@@ -163,59 +163,122 @@ function initializeDb(db: DbInstance) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(read);
+
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent TEXT NOT NULL,
+      session_type TEXT DEFAULT 'task',
+      title TEXT NOT NULL,
+      summary TEXT DEFAULT '',
+      tool_calls TEXT DEFAULT '[]',
+      files_changed TEXT DEFAULT '[]',
+      commands_run TEXT DEFAULT '[]',
+      tokens_used INTEGER DEFAULT 0,
+      cost_usd REAL DEFAULT 0.0,
+      duration_seconds INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'completed',
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME DEFAULT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent ON agent_sessions(agent);
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_started ON agent_sessions(started_at);
   `);
 
-  // TODO(mock): Replace seed data with real OpenClaw webhook-based usage logging
-  // Seed usage_log if empty
-  const usageCount = db.prepare('SELECT COUNT(*) as c FROM usage_log').get() as { c: number };
-  if (usageCount.c === 0) {
-    const insUsage = db.prepare(
-      'INSERT INTO usage_log (agent, model, input_tokens, output_tokens, cost_usd, task_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
-    const now = Date.now();
-    const sampleUsage = [
-      ['Jack', 'claude-opus-4-6', 15000, 8000, 0.27, 'Jashboard upgrade', new Date(now - 6 * 86400000).toISOString()],
-      ['Planner', 'claude-sonnet-4-6', 12000, 6000, 0.12, 'ClawWork planning', new Date(now - 5 * 86400000).toISOString()],
-      ['Coder', 'claude-opus-4-6', 45000, 30000, 0.98, 'Phase 1 implementation', new Date(now - 3 * 86400000).toISOString()],
-      ['Reviewer', 'claude-sonnet-4-6', 20000, 10000, 0.18, 'QA audit', new Date(now - 1 * 86400000).toISOString()],
+  // TODO(mock): Seed agent_sessions with representative sessions from the last 2 days of work
+  const sessionsCount = db.prepare('SELECT COUNT(*) as c FROM agent_sessions').get() as { c: number };
+  if (sessionsCount.c === 0) {
+    const insSess = db.prepare(`
+      INSERT INTO agent_sessions
+        (agent, session_type, title, summary, tool_calls, files_changed, commands_run,
+         tokens_used, cost_usd, duration_seconds, status, started_at, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now4 = Date.now();
+    const sessions = [
+      {
+        agent: 'Coder',
+        session_type: 'task',
+        title: 'Tier 1+2 Upgrade — DnD kanban, SSE, activity feed',
+        summary: 'Built 10 features: drag-and-drop kanban, SSE for agent status, activity feed, subtasks, global search, notifications, settings page',
+        tool_calls: JSON.stringify([
+          { tool: 'edit', args_summary: 'Modified 26 files', result_summary: '+2,218 lines' },
+          { tool: 'exec', args_summary: 'npm install @hello-pangea/dnd', result_summary: 'Added DnD library' },
+          { tool: 'exec', args_summary: 'npm run build', result_summary: 'Build passed' },
+        ]),
+        files_changed: JSON.stringify(['tasks/page.tsx', 'db.ts', 'StatusBanner.tsx', 'SearchPalette.tsx', 'Sidebar.tsx']),
+        commands_run: JSON.stringify(['npm install @hello-pangea/dnd', 'npm run build']),
+        tokens_used: 30900,
+        cost_usd: 0.98,
+        duration_seconds: 423,
+        status: 'completed',
+        started_at: new Date(now4 - 2 * 86400000 - 7200000).toISOString(),
+        completed_at: new Date(now4 - 2 * 86400000 - 7200000 + 423000).toISOString(),
+      },
+      {
+        agent: 'Reviewer',
+        session_type: 'task',
+        title: 'QA Audit — Fix 11 bugs + add DB indexes',
+        summary: 'Found and fixed: missing auth guard, async params pattern, orphan subtasks, StatusBanner mapping, kanban snap-back, calendar mobile layout. Added force-dynamic to all routes.',
+        tool_calls: JSON.stringify([
+          { tool: 'read', args_summary: 'Audited all 26 API routes', result_summary: 'Found 11 issues' },
+          { tool: 'edit', args_summary: 'Fixed 25 files', result_summary: '+113/-28 lines' },
+          { tool: 'exec', args_summary: 'npm run build', result_summary: 'Build passed, 0 errors' },
+        ]),
+        files_changed: JSON.stringify(['tasks/dispatch/route.ts', 'cron-events/route.ts', 'projects/[id]/route.ts', 'StatusBanner.tsx', 'calendar/page.tsx']),
+        commands_run: JSON.stringify(['npm run build', 'curl tests']),
+        tokens_used: 27800,
+        cost_usd: 0.42,
+        duration_seconds: 581,
+        status: 'completed',
+        started_at: new Date(now4 - 2 * 86400000 - 3600000).toISOString(),
+        completed_at: new Date(now4 - 2 * 86400000 - 3600000 + 581000).toISOString(),
+      },
+      {
+        agent: 'Coder',
+        session_type: 'task',
+        title: 'Phase 1 — Chat, Usage, Git, R&D, Notifications',
+        summary: 'Built chat embed, usage/cost tracking dashboard, git integration on project cards, wired R&D Lab trigger, notification bell with dropdown.',
+        tool_calls: JSON.stringify([
+          { tool: 'write', args_summary: 'Created 14 new files', result_summary: '+1,343 lines' },
+          { tool: 'exec', args_summary: 'npm run build', result_summary: 'Build passed' },
+        ]),
+        files_changed: JSON.stringify(['chat/page.tsx', 'usage/page.tsx', 'NotificationBell.tsx', 'notify.ts', 'rd/page.tsx']),
+        commands_run: JSON.stringify(['npm run build']),
+        tokens_used: 21600,
+        cost_usd: 0.68,
+        duration_seconds: 344,
+        status: 'completed',
+        started_at: new Date(now4 - 86400000 - 7200000).toISOString(),
+        completed_at: new Date(now4 - 86400000 - 7200000 + 344000).toISOString(),
+      },
+      {
+        agent: 'Coder',
+        session_type: 'task',
+        title: 'Batch 1 — Dashboard, Markdown, Project Detail, Dependencies, Toasts, Shortcuts',
+        summary: 'Dashboard command center redesign, markdown rendering in task descriptions, project detail page, task blocked_by dependencies, toast notification system, keyboard shortcuts, error boundaries.',
+        tool_calls: JSON.stringify([
+          { tool: 'write', args_summary: 'Created 4 new files, modified 10', result_summary: '+1,202/-303 lines' },
+          { tool: 'exec', args_summary: 'npm run build', result_summary: 'Build passed' },
+        ]),
+        files_changed: JSON.stringify(['home/page.tsx', 'projects/[id]/page.tsx', 'tasks/page.tsx', 'Toast.tsx', 'KeyboardShortcuts.tsx', 'ErrorBoundary.tsx']),
+        commands_run: JSON.stringify(['npm run build']),
+        tokens_used: 41300,
+        cost_usd: 1.31,
+        duration_seconds: 526,
+        status: 'completed',
+        started_at: new Date(now4 - 86400000 - 3600000).toISOString(),
+        completed_at: new Date(now4 - 86400000 - 3600000 + 526000).toISOString(),
+      },
     ];
-    for (const u of sampleUsage) {
-      insUsage.run(...u);
+    for (const s of sessions) {
+      insSess.run(
+        s.agent, s.session_type, s.title, s.summary,
+        s.tool_calls, s.files_changed, s.commands_run,
+        s.tokens_used, s.cost_usd, s.duration_seconds, s.status,
+        s.started_at, s.completed_at
+      );
     }
-  }
-
-  // TODO(mock): Replace seed data with GitHub webhook listener for real commit/PR events
-  // Seed git_events if empty
-  const gitCount = db.prepare('SELECT COUNT(*) as c FROM git_events').get() as { c: number };
-  if (gitCount.c === 0) {
-    const insGit = db.prepare(
-      'INSERT INTO git_events (type, repo, branch, title, author, sha, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    const now2 = Date.now();
-    const commits = [
-      ['commit', 'mission-control', 'main', 'Initial commit: Mission Control dashboard', 'Jack', '4122173', 1, new Date(now2 - 5 * 86400000).toISOString()],
-      ['commit', 'mission-control', 'main', 'Security hardening: fix all auth vulnerabilities', 'Jack', 'bea2174', 1, new Date(now2 - 4 * 86400000).toISOString()],
-      ['commit', 'mission-control', 'main', 'Tier 1+2 upgrade: DnD kanban, SSE, activity feed', 'Coder', '184d37f', 1, new Date(now2 - 3 * 86400000).toISOString()],
-      ['commit', 'mission-control', 'main', 'Reviewer QA: fix 11 bugs + add DB indexes', 'Reviewer', 'b22df66', 1, new Date(now2 - 2 * 86400000).toISOString()],
-      ['commit', 'mission-control', 'main', 'UX: task filters, collapsible Done column', 'Jack', 'a0934de', 1, new Date(now2 - 1 * 86400000).toISOString()],
-    ];
-    for (const c of commits) {
-      insGit.run(...c);
-    }
-  }
-
-  // TODO(mock): Remove seed notifications — real ones are auto-created by task/R&D/agent flows
-  // Seed notifications if empty
-  const notifCount = db.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number };
-  if (notifCount.c === 0) {
-    const insNotif = db.prepare(
-      'INSERT INTO notifications (type, title, message, read, created_at) VALUES (?, ?, ?, ?, ?)'
-    );
-    const now3 = Date.now();
-    insNotif.run('system', 'Jashboard Phase 1 deployed', 'Chat, Usage, Git, R&D, and Notifications are live.', 0, new Date(now3 - 300000).toISOString());
-    insNotif.run('rd_complete', 'R&D Cycle completed', 'Latest R&D cycle analysis is ready for review.', 0, new Date(now3 - 1800000).toISOString());
-    insNotif.run('task_completed', 'Task completed: Phase 1 implementation', 'Coder agent finished Phase 1 feature build.', 0, new Date(now3 - 3600000).toISOString());
-    insNotif.run('agent_alert', 'Agent Reviewer went offline', 'Reviewer agent has not checked in for 30 minutes.', 0, new Date(now3 - 7200000).toISOString());
   }
 
   // Activity log table

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Plus, Edit2, Trash2, X, Loader2, FolderKanban, GitCommit, GitPullRequest, GitMerge } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Loader2, FolderKanban, GitCommit, GitPullRequest, GitMerge, RefreshCw } from 'lucide-react';
 
 interface Project {
   id: number;
@@ -100,6 +100,7 @@ export default function ProjectsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -190,6 +191,24 @@ export default function ProjectsPage() {
     fetchProjects();
   }
 
+  async function handleGitSync() {
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/git/sync', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json() as { synced: number };
+        await fetchGitEvents();
+        alert(`Synced ${data.synced} new commit${data.synced !== 1 ? 's' : ''} from GitHub`);
+      } else {
+        alert('Sync failed. Check gh CLI auth.');
+      }
+    } catch {
+      alert('Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -201,12 +220,22 @@ export default function ProjectsPage() {
           </h1>
           <p className="text-slate-400 text-sm mt-0.5">{projects.length} project{projects.length !== 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl font-medium text-sm transition-colors"
-        >
-          <Plus size={16} /> New Project
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleGitSync}
+            disabled={syncing}
+            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-white px-4 py-2 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing…' : 'Sync GitHub'}
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl font-medium text-sm transition-colors"
+          >
+            <Plus size={16} /> New Project
+          </button>
+        </div>
       </div>
 
       {/* Filter Tabs */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { BarChart3, DollarSign, Cpu, Loader2 } from 'lucide-react';
+import { BarChart3, DollarSign, Cpu, Loader2, Plus, X } from 'lucide-react';
 
 interface AgentUsage {
   agent: string;
@@ -62,10 +62,29 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+const AGENT_OPTIONS = ['Jack', 'Planner', 'Coder', 'Reviewer'];
+const MODEL_OPTIONS = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'gpt-5.1-codex'];
+
+interface LogForm {
+  agent: string;
+  model: string;
+  input_tokens: string;
+  output_tokens: string;
+  cost_usd: string;
+  task_ref: string;
+}
+
 export default function UsagePage() {
   const [period, setPeriod] = useState<Period>('week');
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [logForm, setLogForm] = useState<LogForm>({
+    agent: 'Jack', model: 'claude-opus-4-6',
+    input_tokens: '', output_tokens: '', cost_usd: '', task_ref: '',
+  });
+  const [logSaving, setLogSaving] = useState(false);
+  const [logError, setLogError] = useState('');
 
   const fetchUsage = useCallback(async (p: Period) => {
     setLoading(true);
@@ -86,6 +105,44 @@ export default function UsagePage() {
     fetchUsage(period);
   }, [period, fetchUsage]);
 
+  async function handleLogSubmit() {
+    setLogError('');
+    const input = parseInt(logForm.input_tokens, 10);
+    const output = parseInt(logForm.output_tokens, 10);
+    const cost = parseFloat(logForm.cost_usd);
+    if (!logForm.agent || !logForm.model || isNaN(input) || isNaN(output) || isNaN(cost)) {
+      setLogError('All fields except task ref are required');
+      return;
+    }
+    setLogSaving(true);
+    try {
+      const res = await fetch('/api/usage/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent: logForm.agent,
+          model: logForm.model,
+          input_tokens: input,
+          output_tokens: output,
+          cost_usd: cost,
+          task_ref: logForm.task_ref,
+        }),
+      });
+      if (res.ok) {
+        setShowLogModal(false);
+        setLogForm({ agent: 'Jack', model: 'claude-opus-4-6', input_tokens: '', output_tokens: '', cost_usd: '', task_ref: '' });
+        fetchUsage(period);
+      } else {
+        const err = await res.json() as { error: string };
+        setLogError(err.error ?? 'Failed to log usage');
+      }
+    } catch {
+      setLogError('Failed to log usage');
+    } finally {
+      setLogSaving(false);
+    }
+  }
+
   const maxAgentCost = data?.by_agent.length
     ? Math.max(...data.by_agent.map((a) => a.cost))
     : 1;
@@ -105,7 +162,111 @@ export default function UsagePage() {
           </h1>
           <p className="text-slate-400 text-sm mt-0.5">API token usage and cost tracking per agent</p>
         </div>
+        <button
+          onClick={() => setShowLogModal(true)}
+          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl font-medium text-sm transition-colors"
+        >
+          <Plus size={15} /> Log Usage
+        </button>
       </div>
+
+      {/* Log Usage Modal */}
+      {showLogModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-white">Log Usage</h2>
+              <button onClick={() => setShowLogModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Agent</label>
+                  <select
+                    value={logForm.agent}
+                    onChange={(e) => setLogForm({ ...logForm, agent: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    {AGENT_OPTIONS.map((a) => <option key={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Model</label>
+                  <select
+                    value={logForm.model}
+                    onChange={(e) => setLogForm({ ...logForm, model: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    {MODEL_OPTIONS.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Input Tokens</label>
+                  <input
+                    type="number" min={0}
+                    value={logForm.input_tokens}
+                    onChange={(e) => setLogForm({ ...logForm, input_tokens: e.target.value })}
+                    placeholder="e.g. 15000"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Output Tokens</label>
+                  <input
+                    type="number" min={0}
+                    value={logForm.output_tokens}
+                    onChange={(e) => setLogForm({ ...logForm, output_tokens: e.target.value })}
+                    placeholder="e.g. 8000"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Cost (USD)</label>
+                  <input
+                    type="number" min={0} step="0.001"
+                    value={logForm.cost_usd}
+                    onChange={(e) => setLogForm({ ...logForm, cost_usd: e.target.value })}
+                    placeholder="e.g. 0.270"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Task Ref (optional)</label>
+                  <input
+                    type="text"
+                    value={logForm.task_ref}
+                    onChange={(e) => setLogForm({ ...logForm, task_ref: e.target.value })}
+                    placeholder="e.g. Batch 2 build"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+              {logError && <p className="text-red-400 text-sm">{logError}</p>}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowLogModal(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 rounded-xl text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLogSubmit}
+                disabled={logSaving}
+                className="flex-1 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                {logSaving ? 'Saving…' : 'Log Usage'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Period Tabs */}
       <div className="flex gap-2 flex-wrap">

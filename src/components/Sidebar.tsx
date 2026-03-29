@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Rocket, LayoutDashboard, CheckSquare, FolderKanban, Brain,
   CalendarDays, Users, LogOut, FlaskConical, X, Search, Settings,
-  MessageSquare, BarChart3,
+  MessageSquare, BarChart3, ScrollText,
 } from 'lucide-react';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcuts';
 
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/memory', label: 'Memory', icon: Brain },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/teams', label: 'Teams', icon: Users },
+  { href: '/agents', label: 'Agent Logs', icon: ScrollText },
   { href: '/usage', label: 'Usage', icon: BarChart3 },
   { href: '/rd', label: 'R&D Lab', icon: FlaskConical },
   { href: '/settings', label: 'Settings', icon: Settings },

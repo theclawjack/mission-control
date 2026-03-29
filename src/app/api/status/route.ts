@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { logActivity } from '@/lib/activity';
+import { logUsage } from '@/lib/usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,13 @@ export async function POST(request: NextRequest) {
   const authErr = requireAuth(request); if (authErr) return authErr;
   try {
     const db = getDb();
-    const { agent, status, activity } = await request.json();
+    const body = await request.json() as {
+      agent: string;
+      status?: string;
+      activity?: string;
+      usage?: { input_tokens: number; output_tokens: number; model: string; task_ref?: string };
+    };
+    const { agent, status, activity, usage } = body;
     if (!agent) {
       return NextResponse.json({ error: 'agent is required' }, { status: 400 });
     }
@@ -43,6 +50,10 @@ export async function POST(request: NextRequest) {
     }
     if (existing && existing.status !== (status || 'idle')) {
       logActivity('agent_status_change', `${agent} changed status to ${status || 'idle'}`, { agent, from: existing.status, to: status || 'idle' });
+    }
+    // Optionally log usage if provided
+    if (usage && usage.input_tokens != null && usage.output_tokens != null && usage.model) {
+      logUsage(agent, usage.model, usage.input_tokens, usage.output_tokens, usage.task_ref);
     }
     return NextResponse.json(updated);
   } catch (e) {
