@@ -1,48 +1,51 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
 import StatusBanner from '@/components/StatusBanner';
 import SearchPalette from '@/components/SearchPalette';
+import { ToastProvider } from '@/components/Toast';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setSearchOpen((v) => !v);
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   return (
-    <div className="min-h-screen bg-slate-950 flex">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onSearchOpen={() => setSearchOpen(true)} />
+    <ToastProvider>
+      <div className="min-h-screen bg-slate-950 flex">
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onSearchOpen={() => setSearchOpen(true)}
+        />
 
-      {/* Main content — offset on desktop, full width on mobile */}
-      <main className="flex-1 lg:ml-64 min-h-screen flex flex-col">
-        {/* Mobile top bar with hamburger */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 sticky top-0 z-20">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <Menu size={20} />
-          </button>
-          <span className="text-white font-semibold text-sm">🚀 Jashboard</span>
-        </div>
+        {/* Main content — offset on desktop, full width on mobile */}
+        <main className="flex-1 lg:ml-64 min-h-screen flex flex-col">
+          {/* Mobile top bar with hamburger */}
+          <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 sticky top-0 z-20">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <Menu size={20} />
+            </button>
+            <span className="text-white font-semibold text-sm">🚀 Jashboard</span>
+          </div>
 
-        <StatusBanner />
-        <div className="flex-1">{children}</div>
-      </main>
+          <StatusBanner />
+          <div className="flex-1">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </div>
+        </main>
 
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-    </div>
+        <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+        <KeyboardShortcuts onSearchOpen={() => setSearchOpen(true)} />
+      </div>
+    </ToastProvider>
   );
 }

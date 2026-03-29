@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Plus, Edit2, Trash2, X, Loader2, FolderKanban, GitCommit, GitPullRequest, GitMerge } from 'lucide-react';
 
 interface Project {
@@ -244,20 +245,22 @@ export default function ProjectsPage() {
           {filtered.map((project) => (
             <div
               key={project.id}
-              className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors group"
+              className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors group relative"
             >
               {/* Title + actions */}
               <div className="flex items-start justify-between gap-2 mb-3">
-                <h3 className="font-semibold text-white text-base leading-snug flex-1">{project.name}</h3>
+                <Link href={`/projects/${project.id}`} className="font-semibold text-white text-base leading-snug flex-1 hover:text-cyan-300 transition-colors">
+                  {project.name}
+                </Link>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                   <button
-                    onClick={() => openEdit(project)}
+                    onClick={(e) => { e.stopPropagation(); openEdit(project); }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-700"
                   >
                     <Edit2 size={14} />
                   </button>
                   <button
-                    onClick={() => handleDelete(project.id)}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(project.id); }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700"
                   >
                     <Trash2 size={14} />

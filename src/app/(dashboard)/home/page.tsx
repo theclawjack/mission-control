@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  CheckSquare, Clock, CheckCircle2, Users, Plus, CalendarDays,
-  Loader2, Activity, ArrowRight, Circle, Zap,
+  CheckSquare, CheckCircle2, Activity, ArrowRight, Circle, Loader2,
+  FolderKanban, FlaskConical, Plus, MessageSquare, BarChart3,
 } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 interface Task {
   id: number;
@@ -20,16 +21,9 @@ interface AgentStatus {
   id: number;
   agent_name: string;
   status: string;
+  effective_status?: string;
   current_activity: string;
   last_seen: string;
-}
-
-interface TeamMember {
-  id: number;
-  name: string;
-  role: string;
-  model: string;
-  status: string;
 }
 
 interface ActivityEntry {
@@ -48,14 +42,25 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-const ACTIVITY_ICON: Record<string, string> = {
-  task_created: '📋',
-  task_moved: '↔️',
-  task_completed: '✅',
-  agent_status_change: '🤖',
-  project_created: '📁',
-  rd_cycle_started: '🧪',
-};
+function ActivityIcon({ type }: { type: string }) {
+  const cls = 'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0';
+  switch (type) {
+    case 'task_created':
+      return <div className={`${cls} bg-cyan-900/30`}><CheckSquare size={14} className="text-cyan-400" /></div>;
+    case 'task_moved':
+      return <div className={`${cls} bg-slate-700/60`}><ArrowRight size={14} className="text-slate-400" /></div>;
+    case 'task_completed':
+      return <div className={`${cls} bg-green-900/30`}><CheckCircle2 size={14} className="text-green-400" /></div>;
+    case 'agent_status_change':
+      return <div className={`${cls} bg-yellow-900/30`}><Activity size={14} className="text-yellow-400" /></div>;
+    case 'project_created':
+      return <div className={`${cls} bg-purple-900/30`}><FolderKanban size={14} className="text-purple-400" /></div>;
+    case 'rd_cycle_started':
+      return <div className={`${cls} bg-blue-900/30`}><FlaskConical size={14} className="text-blue-400" /></div>;
+    default:
+      return <div className={`${cls} bg-slate-700/60`}><CheckSquare size={14} className="text-slate-400" /></div>;
+  }
+}
 
 const STATUS_DOT: Record<string, string> = {
   active: 'text-green-400',
@@ -73,49 +78,39 @@ const STATUS_LABEL: Record<string, string> = {
   offline: 'Offline',
 };
 
-const PRIORITY_DOT: Record<string, string> = {
-  high: 'bg-red-500',
-  med: 'bg-yellow-500',
-  low: 'bg-green-500',
-};
-
-const STATUS_TEXT: Record<string, string> = {
-  todo: 'To Do',
-  in_progress: 'In Progress',
-  done: 'Done',
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  todo: 'bg-slate-700 text-slate-300',
-  in_progress: 'bg-yellow-900/40 text-yellow-400',
-  done: 'bg-green-900/40 text-green-400',
-};
-
 export default function HomePage() {
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<AgentStatus[]>([]);
-  const [team, setTeam] = useState<TeamMember[]>([]);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [todayCost, setTodayCost] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [rdLoading, setRdLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [tasksRes, statusRes, teamRes, activityRes] = await Promise.all([
+      const [tasksRes, statusRes, activityRes, usageRes, notifRes] = await Promise.all([
         fetch('/api/tasks'),
         fetch('/api/status'),
-        fetch('/api/team'),
         fetch('/api/activity'),
+        fetch('/api/usage?period=today'),
+        fetch('/api/notifications'),
       ]);
-      const [tasksData, statusData, teamData, activityData] = await Promise.all([
+
+      const [tasksData, statusData, activityData, usageData, notifData] = await Promise.all([
         tasksRes.json(),
         statusRes.json(),
-        teamRes.json(),
         activityRes.json(),
+        usageRes.json(),
+        notifRes.json(),
       ]);
+
       setTasks(Array.isArray(tasksData) ? tasksData : []);
       setAgents(Array.isArray(statusData) ? statusData : []);
-      setTeam(Array.isArray(teamData) ? teamData : []);
       setActivity(Array.isArray(activityData) ? activityData.slice(0, 10) : []);
+      setTodayCost(typeof usageData?.total_cost === 'number' ? usageData.total_cost : null);
+      setUnreadCount(Array.isArray(notifData) ? notifData.length : 0);
     } catch {
       // keep defaults
     } finally {
@@ -129,14 +124,27 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const totalTasks = tasks.length;
-  const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
-  const done = tasks.filter((t) => t.status === 'done').length;
-  const teamCount = team.length;
+  async function triggerRdCycle() {
+    setRdLoading(true);
+    try {
+      const res = await fetch('/api/memos/trigger', { method: 'POST' });
+      if (res.ok) {
+        addToast('R&D cycle started', 'success');
+        fetchData();
+      } else {
+        addToast('Failed to trigger R&D cycle', 'error');
+      }
+    } catch {
+      addToast('Failed to trigger R&D cycle', 'error');
+    } finally {
+      setRdLoading(false);
+    }
+  }
 
-  const recentTasks = [...tasks]
-    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-    .slice(0, 6);
+  const todoCount = tasks.filter((t) => t.status === 'todo').length;
+  const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
+  const doneCount = tasks.filter((t) => t.status === 'done').length;
+  const activeAgents = agents.filter((a) => (a.effective_status || a.status) !== 'offline').length;
 
   if (loading) {
     return (
@@ -146,163 +154,171 @@ export default function HomePage() {
     );
   }
 
-  const stats = [
-    { label: 'Total Tasks', value: totalTasks, icon: CheckSquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20' },
-    { label: 'In Progress', value: inProgress, icon: Clock, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20' },
-    { label: 'Completed', value: done, icon: CheckCircle2, color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20' },
-    { label: 'Team Members', value: teamCount, icon: Users, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-  ];
-
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-0.5">Operations overview</p>
+        <h1 className="text-2xl font-bold text-white">Command Center</h1>
+        <p className="text-slate-400 text-sm mt-0.5">Operations overview — live</p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Top row: 4 stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className={`${stat.bg} border rounded-xl p-4 flex items-center gap-4`}
-            >
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stat.color} bg-slate-800/50`}>
-                <Icon size={20} />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">{stat.value}</div>
-                <div className="text-slate-400 text-xs">{stat.label}</div>
-              </div>
+        {/* Total Tasks */}
+        <Link href="/tasks" className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-4 hover:border-cyan-500/40 transition-colors">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-800/50">
+              <CheckSquare size={18} className="text-cyan-400" />
             </div>
-          );
-        })}
+            <span className="text-slate-400 text-xs font-medium">Total Tasks</span>
+          </div>
+          <div className="text-2xl font-bold text-white mb-1">{tasks.length}</div>
+          <div className="text-xs text-slate-500 space-x-2">
+            <span className="text-slate-400">{todoCount} todo</span>
+            <span>·</span>
+            <span className="text-yellow-400">{inProgressCount} active</span>
+            <span>·</span>
+            <span className="text-green-400">{doneCount} done</span>
+          </div>
+        </Link>
+
+        {/* Today's Cost */}
+        <Link href="/usage" className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 hover:border-green-500/40 transition-colors">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-800/50">
+              <BarChart3 size={18} className="text-green-400" />
+            </div>
+            <span className="text-slate-400 text-xs font-medium">Today&apos;s Cost</span>
+          </div>
+          <div className="text-2xl font-bold text-white mb-1">
+            {todayCost !== null ? `$${todayCost.toFixed(4)}` : '—'}
+          </div>
+          <div className="text-xs text-slate-500">API usage today</div>
+        </Link>
+
+        {/* Active Agents */}
+        <Link href="/teams" className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 hover:border-purple-500/40 transition-colors">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-800/50">
+              <Activity size={18} className="text-purple-400" />
+            </div>
+            <span className="text-slate-400 text-xs font-medium">Active Agents</span>
+          </div>
+          <div className="text-2xl font-bold text-white mb-1">{activeAgents}</div>
+          <div className="text-xs text-slate-500">of {agents.length} registered</div>
+        </Link>
+
+        {/* Unread Notifications */}
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-800/50">
+              <CheckCircle2 size={18} className="text-yellow-400" />
+            </div>
+            <span className="text-slate-400 text-xs font-medium">Notifications</span>
+          </div>
+          <div className="text-2xl font-bold text-white mb-1">{unreadCount}</div>
+          <div className="text-xs text-slate-500">unread alerts</div>
+        </div>
       </div>
 
+      {/* Middle: Activity + Agent Status */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Agent Status */}
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
+        {/* Recent Activity (2/3) */}
+        <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-white flex items-center gap-2">
               <Activity size={16} className="text-cyan-400" />
+              Recent Activity
+            </h2>
+            <span className="text-xs text-slate-500">Last 10 events</span>
+          </div>
+          {activity.length === 0 ? (
+            <div className="text-sm text-slate-500 text-center py-8">No activity yet</div>
+          ) : (
+            <div className="space-y-1">
+              {activity.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 py-2 border-b border-slate-700/40 last:border-0">
+                  <ActivityIcon type={entry.type} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-slate-200 truncate">{entry.message}</div>
+                  </div>
+                  <span className="text-xs text-slate-500 flex-shrink-0">{timeAgo(entry.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Agent Status (1/3) */}
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-white flex items-center gap-2">
+              <Circle size={8} className="fill-current text-green-400" />
               Agent Status
             </h2>
             <span className="text-xs text-slate-500">Live</span>
           </div>
           <div className="space-y-3">
-            {agents.map((agent) => (
-              <div key={agent.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            {agents.map((agent) => {
+              const effectiveStatus = agent.effective_status || agent.status;
+              return (
+                <div key={agent.id} className="flex items-start gap-3">
                   <Circle
-                    size={10}
-                    className={`fill-current ${STATUS_DOT[agent.status] || STATUS_DOT.idle}`}
+                    size={8}
+                    className={`fill-current mt-1.5 flex-shrink-0 ${STATUS_DOT[effectiveStatus] || STATUS_DOT.idle}`}
                   />
-                  <div>
-                    <div className="text-sm font-medium text-slate-200">{agent.agent_name}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium text-slate-200">{agent.agent_name}</span>
+                      <span className={`text-xs flex-shrink-0 ${STATUS_DOT[effectiveStatus] || 'text-slate-500'}`}>
+                        {STATUS_LABEL[effectiveStatus] || effectiveStatus}
+                      </span>
+                    </div>
                     {agent.current_activity && (
-                      <div className="text-xs text-slate-500 truncate max-w-[180px]">{agent.current_activity}</div>
+                      <div className="text-xs text-slate-500 truncate mt-0.5">{agent.current_activity}</div>
                     )}
                   </div>
                 </div>
-                <span className={`text-xs ${STATUS_DOT[agent.status] || 'text-slate-500'}`}>
-                  {STATUS_LABEL[agent.status] || agent.status}
-                </span>
-              </div>
-            ))}
+              );
+            })}
             {agents.length === 0 && (
               <div className="text-sm text-slate-500 text-center py-4">No agents registered</div>
             )}
           </div>
         </div>
-
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-white flex items-center gap-2">
-              <CheckSquare size={16} className="text-cyan-400" />
-              Recent Tasks
-            </h2>
-            <Link href="/tasks" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
-              View all <ArrowRight size={12} />
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {recentTasks.map((task) => (
-              <div key={task.id} className="flex items-center justify-between py-2 border-b border-slate-700/50 last:border-0">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIORITY_DOT[task.priority] || PRIORITY_DOT.med}`} />
-                  <span className="text-sm text-slate-200 truncate">{task.title}</span>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[task.status] || STATUS_BADGE.todo}`}>
-                    {STATUS_TEXT[task.status] || task.status}
-                  </span>
-                  <span className="text-xs text-slate-600">@{task.assignee}</span>
-                </div>
-              </div>
-            ))}
-            {recentTasks.length === 0 && (
-              <div className="text-sm text-slate-500 text-center py-8">No tasks yet</div>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-white flex items-center gap-2">
-            <Zap size={16} className="text-cyan-400" />
-            Recent Activity
-          </h2>
-          <span className="text-xs text-slate-500">Last 10 events</span>
+      {/* Bottom: Quick Actions */}
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/tasks?create=true"
+            className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            <Plus size={16} /> New Task
+          </Link>
+          <button
+            onClick={triggerRdCycle}
+            disabled={rdLoading}
+            className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            {rdLoading ? <Loader2 size={16} className="animate-spin" /> : <FlaskConical size={16} />}
+            Run R&amp;D Cycle
+          </button>
+          <Link
+            href="/chat"
+            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-5 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            <MessageSquare size={16} /> Open Chat
+          </Link>
+          <Link
+            href="/usage"
+            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-5 py-2.5 rounded-xl font-medium text-sm transition-colors"
+          >
+            <BarChart3 size={16} /> View Usage
+          </Link>
         </div>
-        {activity.length === 0 ? (
-          <div className="text-sm text-slate-500 text-center py-4">No activity yet</div>
-        ) : (
-          <div className="space-y-2">
-            {activity.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3 py-1.5 border-b border-slate-700/40 last:border-0">
-                <span className="text-base flex-shrink-0 mt-0.5">{ACTIVITY_ICON[entry.type] ?? '📌'}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-200 truncate">{entry.message}</div>
-                </div>
-                <span className="text-xs text-slate-500 flex-shrink-0 mt-0.5">{timeAgo(entry.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/tasks"
-          className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2.5 rounded-xl font-medium text-sm transition-colors"
-        >
-          <Plus size={16} /> New Task
-        </Link>
-        <Link
-          href="/calendar"
-          className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl font-medium text-sm transition-colors"
-        >
-          <CalendarDays size={16} /> Calendar
-        </Link>
-        <Link
-          href="/projects"
-          className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl font-medium text-sm transition-colors"
-        >
-          <CheckSquare size={16} /> Projects
-        </Link>
-        <Link
-          href="/teams"
-          className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-xl font-medium text-sm transition-colors"
-        >
-          <Users size={16} /> Team
-        </Link>
       </div>
     </div>
   );

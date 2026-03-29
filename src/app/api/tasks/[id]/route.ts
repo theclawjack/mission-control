@@ -17,29 +17,38 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const id = parseInt(params.id);
     const body = await request.json();
     const { title, description, assignee, priority, status, project_id, parent_id } = body;
+    const blocked_by: number | null | undefined = 'blocked_by' in body ? (body.blocked_by ?? null) : undefined;
 
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     if (!existing) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    db.prepare(
-      `UPDATE tasks SET
-        title = COALESCE(?, title),
-        description = COALESCE(?, description),
-        assignee = COALESCE(?, assignee),
-        priority = COALESCE(?, priority),
-        status = COALESCE(?, status),
-        project_id = CASE WHEN ? IS NOT NULL THEN ? ELSE project_id END,
-        parent_id = CASE WHEN ? IS NOT NULL THEN ? ELSE parent_id END,
-        updated_at = datetime('now')
-      WHERE id = ?`
-    ).run(
+    // Build update dynamically to handle explicit null values
+    const setClauses: string[] = [
+      'title = COALESCE(?, title)',
+      'description = COALESCE(?, description)',
+      'assignee = COALESCE(?, assignee)',
+      'priority = COALESCE(?, priority)',
+      'status = COALESCE(?, status)',
+      'project_id = CASE WHEN ? IS NOT NULL THEN ? ELSE project_id END',
+      'parent_id = CASE WHEN ? IS NOT NULL THEN ? ELSE parent_id END',
+    ];
+    const runArgs: unknown[] = [
       title ?? null, description ?? null, assignee ?? null, priority ?? null, status ?? null,
       project_id !== undefined ? project_id : null, project_id !== undefined ? project_id : null,
       parent_id !== undefined ? parent_id : null, parent_id !== undefined ? parent_id : null,
-      id
-    );
+    ];
+
+    if (blocked_by !== undefined) {
+      setClauses.push('blocked_by = ?');
+      runArgs.push(blocked_by);
+    }
+
+    setClauses.push("updated_at = datetime('now')");
+    runArgs.push(id);
+
+    db.prepare(`UPDATE tasks SET ${setClauses.join(', ')} WHERE id = ?`).run(...runArgs);
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown>;
 
@@ -93,12 +102,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const db = getDb();
     const id = parseInt(params.id);
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
     const subtasks = db.prepare('SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at ASC').all(id);
-    return NextResponse.json({ ...task as object, subtasks });
+    // Fetch blocking task title if blocked_by is set
+    let blocking_task: { id: number; title: string } | null = null;
+    if (task.blocked_by) {
+      blocking_task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(task.blocked_by) as { id: number; title: string } | null;
+    }
+    return NextResponse.json({ ...task, subtasks, blocking_task });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 });

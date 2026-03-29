@@ -4,6 +4,33 @@ import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const authError = requireAuth(request);
+  if (authError) return authError;
+
+  const { id } = params;
+  const db = getDb();
+
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  if (!project) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const tasks = db.prepare(
+    `SELECT t.*,
+      (SELECT COUNT(*) FROM tasks sub WHERE sub.parent_id = t.id) as subtask_count
+     FROM tasks t
+     WHERE t.project_id = ? AND t.parent_id IS NULL
+     ORDER BY t.created_at DESC`
+  ).all(id);
+
+  const gitEvents = db.prepare(
+    'SELECT * FROM git_events WHERE project_id = ? ORDER BY created_at DESC LIMIT 10'
+  ).all(id);
+
+  return NextResponse.json({ ...project as object, tasks, git_events: gitEvents });
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   const authError = requireAuth(request);
   if (authError) return authError;

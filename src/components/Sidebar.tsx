@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -7,6 +8,7 @@ import {
   CalendarDays, Users, LogOut, FlaskConical, X, Search, Settings,
   MessageSquare, BarChart3,
 } from 'lucide-react';
+import { KeyboardShortcutsModal } from '@/components/KeyboardShortcuts';
 
 const navItems = [
   { href: '/home', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,6 +32,7 @@ interface SidebarProps {
 export default function Sidebar({ open, onClose, onSearchOpen }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -124,12 +127,22 @@ export default function Sidebar({ open, onClose, onSearchOpen }: SidebarProps) {
             <LogOut size={18} />
             <span className="font-medium text-sm">Logout</span>
           </button>
-          <div className="mt-3 px-3 py-2 bg-slate-800/50 rounded-xl">
-            <div className="text-slate-500 text-xs">🟢 System Online</div>
-            <div className="text-slate-600 text-xs mt-0.5">Port 3100 · SQLite</div>
+          <div className="mt-3 px-3 py-2 bg-slate-800/50 rounded-xl flex items-center justify-between">
+            <div>
+              <div className="text-slate-500 text-xs">🟢 System Online</div>
+              <div className="text-slate-600 text-xs mt-0.5">Port 3100 · SQLite</div>
+            </div>
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-400 hover:text-white text-xs font-bold transition-colors flex items-center justify-center flex-shrink-0"
+              title="Keyboard shortcuts (?)"
+            >
+              ?
+            </button>
           </div>
         </div>
       </aside>
+      {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </>
   );
 }

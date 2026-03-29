@@ -1,13 +1,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, ChevronLeft, ChevronRight, X, Loader2, FolderKanban, ListTree, ChevronDown, ChevronUp, Filter, Pencil, Eye, Save } from 'lucide-react';
+import { marked } from 'marked';
+import { Plus, Trash2, ChevronLeft, ChevronRight, X, Loader2, FolderKanban, ListTree, ChevronDown, ChevronUp, Filter, Pencil, Eye, Save, Lock } from 'lucide-react';
 import {
   DragDropContext,
   Droppable,
   Draggable,
   DropResult,
 } from '@hello-pangea/dnd';
+import { useToast } from '@/components/Toast';
+
+function renderMd(text: string): string {
+  if (!text) return '';
+  return marked(text, { async: false }) as string;
+}
 
 interface Task {
   id: number;
@@ -18,9 +25,15 @@ interface Task {
   status: 'todo' | 'in_progress' | 'done';
   project_id: number | null;
   parent_id: number | null;
+  blocked_by: number | null;
   subtask_count: number;
   created_at: string;
   updated_at: string;
+}
+
+interface TaskDetail extends Task {
+  subtasks: Task[];
+  blocking_task: { id: number; title: string } | null;
 }
 
 interface Project {
@@ -85,6 +98,7 @@ interface TaskForm {
   priority: string;
   status: string;
   project_id: string | number;
+  blocked_by: string | number;
 }
 
 const emptyForm: TaskForm = {
@@ -94,21 +108,25 @@ const emptyForm: TaskForm = {
   priority: 'med',
   status: 'todo',
   project_id: '',
+  blocked_by: '',
 };
 
 // ─── Unified Task Modal ────────────────────────────────────────────────────────
 
 interface TaskModalProps {
   mode: ModalMode;
-  task: Task | null;        // null for create
+  task: Task | null;
   assignees: string[];
   projects: Project[];
+  allTasks: Task[];
   onClose: () => void;
   onSaved: () => void;
   onDeleted: (id: number) => void;
+  onOpenTask: (task: Task) => void;
 }
 
-function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSaved, onDeleted }: TaskModalProps) {
+function TaskModal({ mode: initialMode, task, assignees, projects, allTasks, onClose, onSaved, onDeleted, onOpenTask }: TaskModalProps) {
+  const { addToast } = useToast();
   const [mode, setMode] = useState<ModalMode>(initialMode);
   const [form, setForm] = useState<TaskForm>({
     title: task?.title || '',
@@ -117,33 +135,33 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
     priority: task?.priority || 'med',
     status: task?.status || 'todo',
     project_id: task?.project_id ?? '',
+    blocked_by: task?.blocked_by ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Subtasks (view + edit mode)
-  const [subtasks, setSubtasks] = useState<Task[]>([]);
-  const [loadingSubtasks, setLoadingSubtasks] = useState(!!task);
+  const [taskDetail, setTaskDetail] = useState<TaskDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(!!task);
+
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [savingSubtask, setSavingSubtask] = useState(false);
 
-  const fetchSubtasks = useCallback(async () => {
+  const fetchDetail = useCallback(async () => {
     if (!task) return;
     try {
       const res = await fetch(`/api/tasks/${task.id}`);
-      const data = await res.json();
-      setSubtasks(Array.isArray(data.subtasks) ? data.subtasks : []);
+      const data = await res.json() as TaskDetail;
+      setTaskDetail(data);
     } catch {
-      setSubtasks([]);
+      setTaskDetail(null);
     } finally {
-      setLoadingSubtasks(false);
+      setLoadingDetail(false);
     }
   }, [task]);
 
-  useEffect(() => { if (task) fetchSubtasks(); }, [task, fetchSubtasks]);
+  useEffect(() => { if (task) fetchDetail(); }, [task, fetchDetail]);
 
-  // Reset form when switching to edit mode
   function switchToEdit() {
     if (task) {
       setForm({
@@ -153,6 +171,7 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
         priority: task.priority,
         status: task.status,
         project_id: task.project_id ?? '',
+        blocked_by: task.blocked_by ?? '',
       });
     }
     setError('');
@@ -170,24 +189,31 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
       const payload = {
         ...form,
         project_id: form.project_id === '' ? null : Number(form.project_id),
+        blocked_by: form.blocked_by === '' ? null : Number(form.blocked_by),
       };
       if (task) {
-        await fetch(`/api/tasks/${task.id}`, {
+        const res = await fetch(`/api/tasks/${task.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        if (!res.ok) throw new Error('Failed to update');
+        addToast('Task updated', 'success');
       } else {
-        await fetch('/api/tasks', {
+        const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        if (!res.ok) throw new Error('Failed to create');
+        addToast('Task created', 'success');
       }
       onSaved();
       onClose();
-    } catch {
-      setError('Failed to save task');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to save task';
+      setError(msg);
+      addToast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -195,6 +221,12 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
 
   async function handleDelete() {
     if (!task || !confirm('Delete this task?')) return;
+    try {
+      await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      addToast('Task deleted', 'success');
+    } catch {
+      addToast('Failed to delete task', 'error');
+    }
     onDeleted(task.id);
     onClose();
   }
@@ -217,7 +249,7 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
       });
       setNewSubtaskTitle('');
       setAddingSubtask(false);
-      fetchSubtasks();
+      fetchDetail();
       onSaved();
     } catch { /* ignore */ } finally {
       setSavingSubtask(false);
@@ -226,14 +258,19 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
 
   async function handleDeleteSubtask(id: number) {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-    fetchSubtasks();
+    fetchDetail();
     onSaved();
   }
 
+  const subtasks = taskDetail?.subtasks || [];
+  const blockingTask = taskDetail?.blocking_task || null;
   const projectName = projects.find((p) => p.id === (mode === 'view' ? task?.project_id : (form.project_id === '' ? null : Number(form.project_id))))?.name;
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
   const displayTitle = isViewMode ? task?.title : (isCreateMode ? 'New Task' : 'Edit Task');
+
+  // Other tasks for "blocked by" dropdown (exclude self)
+  const otherTasks = allTasks.filter((t) => t.id !== task?.id);
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 lg:p-6" onClick={onClose}>
@@ -276,7 +313,6 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {/* Mode toggle buttons */}
             {task && isViewMode && (
               <button
                 onClick={switchToEdit}
@@ -311,20 +347,38 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {isViewMode && task ? (
-            /* ── View Mode: two columns ── */
             <div className="flex flex-col lg:flex-row">
               {/* Left: Description */}
               <div className="flex-1 px-6 lg:px-8 py-6 lg:border-r border-slate-700 min-w-0">
+                {/* Blocked by banner */}
+                {blockingTask && task.status !== 'done' && (
+                  <div className="mb-4 flex items-center gap-3 bg-red-900/20 border border-red-700/50 rounded-xl px-4 py-3">
+                    <Lock size={14} className="text-red-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-red-400 text-sm">🚫 Blocked by: </span>
+                      <button
+                        onClick={() => {
+                          const bt = allTasks.find((t) => t.id === blockingTask.id);
+                          if (bt) { onClose(); setTimeout(() => onOpenTask(bt), 50); }
+                        }}
+                        className="text-red-300 hover:text-red-200 underline text-sm font-medium"
+                      >
+                        #{blockingTask.id} {blockingTask.title}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Description</h3>
                 {task.description ? (
-                  <div className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {task.description}
-                  </div>
+                  <div
+                    className="prose-dark text-slate-200 text-sm leading-relaxed [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-white [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-slate-200 [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-0.5 [&_li]:text-slate-300 [&_code]:bg-slate-700 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-cyan-300 [&_code]:text-xs [&_pre]:bg-slate-900 [&_pre]:p-3 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_a]:text-cyan-400 [&_a]:underline [&_strong]:text-white [&_hr]:border-slate-700 [&_blockquote]:border-l-2 [&_blockquote]:border-cyan-500 [&_blockquote]:pl-4 [&_blockquote]:text-slate-400 [&_blockquote]:italic"
+                    dangerouslySetInnerHTML={{ __html: renderMd(task.description) }}
+                  />
                 ) : (
                   <p className="text-slate-600 text-sm italic">No description — <button onClick={switchToEdit} className="text-cyan-500 hover:text-cyan-400 underline">add one</button></p>
                 )}
 
-                {/* Timestamps */}
                 <div className="mt-8 pt-4 border-t border-slate-700/50 flex gap-6 text-xs text-slate-500">
                   <span>Created {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   <span>Updated {new Date(task.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
@@ -345,7 +399,7 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
                   </button>
                 </div>
 
-                {loadingSubtasks ? (
+                {loadingDetail ? (
                   <div className="text-slate-500 text-xs text-center py-4">
                     <Loader2 size={14} className="animate-spin inline mr-1" /> Loading…
                   </div>
@@ -430,7 +484,7 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
                   rows={10}
                   className="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white text-sm leading-relaxed placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 resize-y min-h-[150px]"
                 />
-                <p className="text-xs text-slate-600 mt-1">⌘+Enter to save · Drag corner to resize</p>
+                <p className="text-xs text-slate-600 mt-1">Supports <strong className="text-slate-500">markdown</strong> formatting · ⌘+Enter to save</p>
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -472,23 +526,37 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-300 mb-2">Project</label>
-                  <div className="relative">
-                    <select
-                      value={form.project_id}
-                      onChange={(e) => setForm({ ...form, project_id: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500 appearance-none pr-8"
-                    >
-                      <option value="">None</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                  </div>
+                  <select
+                    value={form.project_id}
+                    onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="">None</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              {/* Subtasks section in edit mode (for existing tasks) */}
+              {/* Blocked By */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+                  <Lock size={13} className="text-red-400" /> Blocked By
+                </label>
+                <select
+                  value={form.blocked_by}
+                  onChange={(e) => setForm({ ...form, blocked_by: e.target.value })}
+                  className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="">None (not blocked)</option>
+                  {otherTasks.map((t) => (
+                    <option key={t.id} value={t.id}>#{t.id} {t.title} [{t.status}]</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subtasks in edit mode */}
               {task && (
                 <div className="border-t border-slate-700 pt-5">
                   <div className="flex items-center justify-between mb-3">
@@ -576,14 +644,18 @@ function TaskModal({ mode: initialMode, task, assignees, projects, onClose, onSa
 interface TaskCardProps {
   task: Task;
   projects: Project[];
+  allTasks: Task[];
   onOpen: (task: Task) => void;
   onDelete: (id: number) => void;
   onMove: (task: Task, direction: 'left' | 'right') => void;
   statusIdx: number;
 }
 
-function TaskCard({ task, projects, onOpen, onDelete, onMove, statusIdx }: TaskCardProps) {
+function TaskCard({ task, projects, allTasks, onOpen, onDelete, onMove, statusIdx }: TaskCardProps) {
   const projectName = projects.find((p) => p.id === task.project_id)?.name;
+  // Check if blocked (blocking task is not done)
+  const blockingTask = task.blocked_by ? allTasks.find((t) => t.id === task.blocked_by) : null;
+  const isBlocked = blockingTask && blockingTask.status !== 'done';
 
   return (
     <div
@@ -592,9 +664,12 @@ function TaskCard({ task, projects, onOpen, onDelete, onMove, statusIdx }: TaskC
     >
       {/* Title */}
       <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="font-semibold text-slate-100 text-sm leading-snug flex-1">
-          {task.title}
-        </span>
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          {isBlocked && <Lock size={12} className="text-red-400 flex-shrink-0" />}
+          <span className="font-semibold text-slate-100 text-sm leading-snug">
+            {task.title}
+          </span>
+        </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
@@ -662,6 +737,7 @@ function TaskCard({ task, projects, onOpen, onDelete, onMove, statusIdx }: TaskC
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [assignees, setAssignees] = useState<string[]>(['Jet', 'Jack']);
@@ -735,7 +811,9 @@ export default function TasksPage() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
     try {
       await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+      addToast('Task deleted', 'success');
     } catch {
+      addToast('Failed to delete task', 'error');
       fetchTasks();
     }
   }
@@ -849,7 +927,7 @@ export default function TasksPage() {
                 </button>
               )}
               {(activeTab === 'done' && doneCollapsed ? grouped[activeTab].slice(0, DONE_PREVIEW_COUNT) : grouped[activeTab]).map((task) => (
-                <TaskCard key={task.id} task={task} projects={projects} onOpen={openTask} onDelete={handleDelete} onMove={moveTask} statusIdx={STATUS_ORDER.indexOf(task.status)} />
+                <TaskCard key={task.id} task={task} projects={projects} allTasks={tasks} onOpen={openTask} onDelete={handleDelete} onMove={moveTask} statusIdx={STATUS_ORDER.indexOf(task.status)} />
               ))}
             </div>
           </div>
@@ -887,7 +965,7 @@ export default function TasksPage() {
                                 {...dragProvided.dragHandleProps}
                                 style={{ ...dragProvided.draggableProps.style, opacity: dragSnapshot.isDragging ? 0.85 : 1 }}
                               >
-                                <TaskCard task={task} projects={projects} onOpen={openTask} onDelete={handleDelete} onMove={moveTask} statusIdx={STATUS_ORDER.indexOf(task.status)} />
+                                <TaskCard task={task} projects={projects} allTasks={tasks} onOpen={openTask} onDelete={handleDelete} onMove={moveTask} statusIdx={STATUS_ORDER.indexOf(task.status)} />
                               </div>
                             )}
                           </Draggable>
@@ -910,9 +988,11 @@ export default function TasksPage() {
           task={modalTask}
           assignees={assignees}
           projects={projects}
+          allTasks={tasks}
           onClose={closeModal}
           onSaved={fetchTasks}
           onDeleted={handleDelete}
+          onOpenTask={openTask}
         />
       )}
     </div>

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       title, description = '', assignee = 'Jet', priority = 'med',
-      status = 'todo', project_id = null, parent_id = null,
+      status = 'todo', project_id = null, parent_id = null, blocked_by = null,
     } = body;
 
     if (!title?.trim()) {
@@ -39,9 +39,9 @@ export async function POST(request: NextRequest) {
 
     const result = db
       .prepare(
-        'INSERT INTO tasks (title, description, assignee, priority, status, project_id, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO tasks (title, description, assignee, priority, status, project_id, parent_id, blocked_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(title.trim(), description, assignee, priority, status, project_id, parent_id);
+      .run(title.trim(), description, assignee, priority, status, project_id, parent_id, blocked_by);
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(result.lastInsertRowid);
 

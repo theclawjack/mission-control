@@ -99,6 +99,13 @@ function initializeDb(db: DbInstance) {
     // Column already exists, ignore
   }
 
+  // Migration: add blocked_by column to tasks
+  try {
+    db.prepare('ALTER TABLE tasks ADD COLUMN blocked_by INTEGER DEFAULT NULL').run();
+  } catch {
+    // Column already exists, ignore
+  }
+
   // Indexes for common queries on tasks
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks (parent_id);

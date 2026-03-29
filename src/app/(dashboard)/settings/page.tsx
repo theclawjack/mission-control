@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Save, TestTube2, Loader2, CheckCircle2 } from 'lucide-react';
+import { Settings, Save, TestTube2, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 export default function SettingsPage() {
+  const { addToast } = useToast();
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     fetch('/api/settings?key=discord_webhook_url')
@@ -20,11 +21,6 @@ export default function SettingsPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  function showToast(msg: string, ok: boolean) {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
-  }
-
   async function handleSave() {
     setSaving(true);
     try {
@@ -34,12 +30,12 @@ export default function SettingsPage() {
         body: JSON.stringify({ key: 'discord_webhook_url', value: webhookUrl }),
       });
       if (res.ok) {
-        showToast('Settings saved!', true);
+        addToast('Settings saved', 'success');
       } else {
-        showToast('Failed to save settings', false);
+        addToast('Failed to save settings', 'error');
       }
     } catch {
-      showToast('Network error', false);
+      addToast('Network error', 'error');
     } finally {
       setSaving(false);
     }
@@ -47,7 +43,7 @@ export default function SettingsPage() {
 
   async function handleTest() {
     if (!webhookUrl.trim()) {
-      showToast('Please enter a webhook URL first', false);
+      addToast('Please enter a webhook URL first', 'error');
       return;
     }
     setTesting(true);
@@ -58,12 +54,12 @@ export default function SettingsPage() {
         body: JSON.stringify({ content: '🚀 Jashboard test notification — Discord webhook is working!' }),
       });
       if (res.ok) {
-        showToast('Test message sent!', true);
+        addToast('Test message sent!', 'success');
       } else {
-        showToast('Webhook returned an error', false);
+        addToast('Webhook returned an error', 'error');
       }
     } catch {
-      showToast('Failed to send test message', false);
+      addToast('Failed to send test message', 'error');
     } finally {
       setTesting(false);
     }
@@ -71,18 +67,6 @@ export default function SettingsPage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl backdrop-blur-sm flex items-center gap-2 ${
-          toast.ok
-            ? 'bg-green-500/20 border border-green-500/40 text-green-300'
-            : 'bg-red-500/20 border border-red-500/40 text-red-300'
-        }`}>
-          {toast.ok ? <CheckCircle2 size={16} /> : null}
-          {toast.msg}
-        </div>
-      )}
-
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white flex items-center gap-3">
